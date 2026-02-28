@@ -180,7 +180,7 @@ func cmdGet(key, env string) error {
 		return fmt.Errorf("get: key %q not found", key)
 	}
 
-	fmt.Print(secrets.String(key))
+	fmt.Println(secrets.String(key))
 
 	return nil
 }

@@ -3,6 +3,8 @@
 package editor
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+const permFile = 0o600
 
 // ContentEditor defines the contract for editing content.
 type ContentEditor interface {
@@ -97,44 +101,27 @@ func New(opts ...Option) (*Editor, error) {
 
 // Edit opens the given content in the editor and returns the modified content.
 func (e *Editor) Edit(content []byte) ([]byte, error) {
-	tmpFile, err := os.CreateTemp("", "gosecrets-*.yaml")
+	tmpPath, err := writeTempFile(content)
 	if err != nil {
-		return nil, fmt.Errorf("gosecrets: cannot create temp file: %w", err)
-	}
-
-	tmpPath := tmpFile.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	if _, err = tmpFile.Write(content); err != nil {
-		_ = tmpFile.Close()
-
-		return nil, fmt.Errorf("gosecrets: cannot write temp file: %w", err)
-	}
-
-	if err = tmpFile.Sync(); err != nil {
-		_ = tmpFile.Close()
-
-		return nil, fmt.Errorf("gosecrets: cannot sync temp file: %w", err)
-	}
-
-	if err = e.runEditor(tmpPath); err != nil {
-		_ = tmpFile.Close()
-
 		return nil, err
 	}
 
-	// Read back from the same file descriptor — avoids os.ReadFile(variable)
-	// which would trigger G304/G703 path traversal warnings.
-	if _, err = tmpFile.Seek(0, io.SeekStart); err != nil {
-		_ = tmpFile.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
 
-		return nil, fmt.Errorf("gosecrets: cannot seek temp file: %w", err)
+	if err = e.runEditor(tmpPath); err != nil {
+		return nil, err
 	}
 
-	modified, err := io.ReadAll(tmpFile)
+	// Re-read by path, not by the original fd. Many editors (vim, nano,
+	// etc.) perform an atomic save — they unlink the old file and rename
+	// a new one into its place. The original fd would still reference
+	// the deleted inode and return stale (pre-edit) content.
+	cleanPath := filepath.Clean(tmpPath)
+	if !strings.HasPrefix(cleanPath, filepath.Clean(os.TempDir())) {
+		return nil, fmt.Errorf("gosecrets: temp file outside temp dir: %s", cleanPath)
+	}
 
-	_ = tmpFile.Close()
-
+	modified, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return nil, fmt.Errorf("gosecrets: cannot read temp file: %w", err)
 	}
@@ -174,6 +161,23 @@ func (e *Editor) runEditor(tmpPath string) error {
 
 // Cmd returns the editor command.
 func (e *Editor) Cmd() string { return e.cmd }
+
+const tempRandBytes = 16
+
+func writeTempFile(content []byte) (string, error) {
+	var buf [tempRandBytes]byte
+	if _, err := io.ReadFull(rand.Reader, buf[:]); err != nil {
+		return "", fmt.Errorf("gosecrets: cannot generate temp name: %w", err)
+	}
+
+	tmpPath := filepath.Join(os.TempDir(), "gosecrets-"+hex.EncodeToString(buf[:])+".yaml")
+
+	if err := os.WriteFile(tmpPath, content, permFile); err != nil {
+		return "", fmt.Errorf("gosecrets: cannot write temp file: %w", err)
+	}
+
+	return tmpPath, nil
+}
 
 func resolveCmd() string {
 	if cmd := os.Getenv("EDITOR"); cmd != "" {
