@@ -155,6 +155,66 @@ CLI Tool:
 
 ```bash
 go install github.com/bilustek/gosecrets/cmd/gosecrets@latest
+
+$ gosecrets
+
+gosecrets - encrypted credentials for Go projects
+
+Usage:
+  gosecrets init [--env ENV]       Initialize a new credential store
+  gosecrets edit [--env ENV]       Edit credentials in $EDITOR
+  gosecrets show [--env ENV]       Print decrypted credentials to stdout
+  gosecrets get KEY [--env ENV]    Get a specific value (dot notation)
+  gosecrets help                   Show this help
+
+Environment:
+  GOSECRETS_ENV                    Environment name (default: development)
+  GOSECRETS_MASTER_KEY             Master key (overrides all key files)
+  GOSECRETS_<ENV>_KEY              Environment-specific key (e.g. GOSECRETS_PRODUCTION_KEY)
+  EDITOR / VISUAL                  Preferred text editor
+
+Examples:
+  gosecrets init                   Creates secrets/development.key + secrets/development.enc
+  gosecrets init --env production  Creates secrets/production.key + secrets/production.enc
+  gosecrets edit                   Opens credentials in your editor
+  gosecrets get database.password  Prints a specific value
+```
+
+---
+
+## API
+
+All accessors support **dot notation** for nested keys (e.g. `"database.password"`).
+
+```go
+secrets, err := gosecrets.Load()
+```
+
+| Method | Return | Zero value | Description |
+|:-------|:-------|:-----------|:------------|
+| `Get(key)` | `any` | `nil` | Raw value |
+| `String(key)` | `string` | `""` | String representation |
+| `Int(key)` | `int` | `0` | Integer value |
+| `Int64(key)` | `int64` | `0` | 64-bit integer value |
+| `Float64(key)` | `float64` | `0` | Floating point value |
+| `Bool(key)` | `bool` | `false` | Boolean value |
+| `Duration(key)` | `time.Duration` | `0` | Parses `"5s"`, `"1h30m"`, etc. |
+| `Map(key)` | `map[string]any` | `nil` | Nested map |
+| `Has(key)` | `bool` | `false` | Check if key exists |
+| `All()` | `map[string]any` | — | Entire credentials map |
+| `MustGet(key)` | `any` | **panic** | Like `Get`, panics if missing |
+| `MustString(key)` | `string` | **panic** | Like `String`, panics if missing |
+
+```go
+// examples
+host := secrets.String("database.host")      // "localhost"
+port := secrets.Int("database.port")          // 5432
+pi := secrets.Float64("pi")                   // 3.14
+debug := secrets.Bool("debug")                // true
+timeout := secrets.Duration("timeout")        // 5s
+db := secrets.Map("database")                 // map[string]any{...}
+
+apiKey := secrets.MustString("api_key")       // panics if not found
 ```
 
 ---
