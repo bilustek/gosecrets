@@ -165,6 +165,7 @@ Usage:
   gosecrets edit [--env ENV]       Edit credentials in $EDITOR
   gosecrets show [--env ENV]       Print decrypted credentials to stdout
   gosecrets get KEY [--env ENV]    Get a specific value (dot notation)
+  gosecrets version                Show version
   gosecrets help                   Show this help
 
 Environment:

@@ -11,6 +11,8 @@ import (
 	"github.com/bilustek/gosecrets/internal/store"
 )
 
+const version = "0.0.0"
+
 const usage = `gosecrets - encrypted credentials for Go projects
 
 Usage:
@@ -18,6 +20,7 @@ Usage:
   gosecrets edit [--env ENV]       Edit credentials in $EDITOR
   gosecrets show [--env ENV]       Print decrypted credentials to stdout
   gosecrets get KEY [--env ENV]    Get a specific value (dot notation)
+  gosecrets version                Show version
   gosecrets help                   Show this help
 
 Environment:
@@ -70,6 +73,10 @@ func run(args []string) error {
 		}
 
 		return cmdGet(args[1], env)
+	case "version", "--version", "-v":
+		fmt.Println(version)
+
+		return nil
 	case "help", "--help", "-h":
 		fmt.Print(usage)
 

@@ -32,6 +32,16 @@ func TestRunHelp(t *testing.T) {
 	}
 }
 
+func TestRunVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, arg := range []string{"version", "--version", "-v"} {
+		if err := run([]string{arg}); err != nil {
+			t.Fatalf("run(%q) error = %v", arg, err)
+		}
+	}
+}
+
 func TestRunUnknownCommand(t *testing.T) {
 	t.Parallel()
 
