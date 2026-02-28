@@ -25,6 +25,15 @@ gosecrets init                    # secrets/development.key + secrets/developmen
 gosecrets init --env production   # secrets/production.key + secrets/production.enc
 ```
 
+Each `init` prints a master key — **save it somewhere safe**. You will need
+this key to decrypt your credentials in deployment (e.g. Portainer, CI).
+Locally, the key file on disk is used automatically.
+
+You should see something like:
+
+    master key: e5d0529e.................................................
+    save this key somewhere safe, you need it to decrypt your credentials.
+
 Edit your **development** config: `gosecrets edit` (pops up your default `$EDITOR`), edit `yaml`:
 
 ```yaml
@@ -110,6 +119,9 @@ Each environment gets its own `.enc` / `.key` pair inside `secrets/`:
 In **development**, the key file on disk is enough. In **production/CI**, set
 `GOSECRETS_<ENV>_KEY` (e.g. `GOSECRETS_PRODUCTION_KEY`) as an environment
 variable and never deploy the key file.
+
+> `.key` files are for local work, env vars are for deployment.
+> When both exist, the env var takes precedence.
 
 ---
 
