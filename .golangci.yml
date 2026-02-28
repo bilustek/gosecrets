@@ -1,0 +1,81 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: false
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - unconvert
+    - unparam
+    - gosec
+    - prealloc
+    - revive
+    - wrapcheck
+  settings:
+    govet:
+      enable:
+        - assign
+        - appends
+        - bools
+        - defers
+        - shadow
+        - unmarshal
+        - waitgroup
+        - lostcancel
+        - slog
+        - unreachable
+    gosec:
+      excludes:
+        - G117 # false positive on token response struct fields
+        - G202 # SQL concatenation with whitelisted sort columns
+        - G704 # SSRF false positive — URLs come from config/OAuth
+        - G706 # log injection false positive — structured slog calls
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - fmt.Fprintln
+        - fmt.Fprintf
+        - fmt.Fprint
+    wrapcheck:
+      ignore-package-globs:
+        - encoding/*
+        - github.com/pkg/*
+        - github.com/google/uuid
+        - github.com/gofiber/fiber/*
+    revive:
+      enable-all-rules: true
+      rules:
+        - name: package-comments
+          disabled: true
+        - name: cognitive-complexity
+          disabled: true
+        - name: cyclomatic
+          disabled: true
+        - name: function-length
+          disabled: true
+        - name: line-length-limit
+          arguments: [120]
+        - name: add-constant
+          arguments:
+            - max-lit-count: "8"
+              allow-strs: '"","%w"'
+              allow-ints: "0,1,2,10,64"
+        - name: max-public-structs
+          arguments: [12]
+
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+    - golines
+  settings:
+    golines:
+      max-len: 120
