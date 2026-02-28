@@ -1,5 +1,10 @@
 ![Version](https://img.shields.io/badge/version-0.0.0-orange.svg)
 ![Go](https://img.shields.io/github/go-mod/go-version/bilustek/gosecrets)
+[![Documentation](https://godoc.org/github.com/bilustek/gosecrets?status.svg)](https://pkg.go.dev/github.com/bilustek/gosecrets)
+[![Go Report Card](https://goreportcard.com/badge/github.com/bilustek/gosecrets)](https://goreportcard.com/report/github.com/bilustek/gosecrets)
+[![codecov](https://codecov.io/gh/bilustek/gosecrets/graph/badge.svg?token=7EADRS8WY2)](https://codecov.io/gh/bilustek/gosecrets)
+[![Run go tests](https://github.com/bilustek/gosecrets/actions/workflows/go-test.yml/badge.svg)](https://github.com/bilustek/gosecrets/actions/workflows/go-test.yml)
+[![Run golangci-lint](https://github.com/bilustek/gosecrets/actions/workflows/go-lint.yml/badge.svg)](https://github.com/bilustek/gosecrets/actions/workflows/go-lint.yml)
 
 # gosecrets
 
