@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)
+![Version](https://img.shields.io/badge/version-0.1.1-orange.svg)
 ![Go](https://img.shields.io/github/go-mod/go-version/bilustek/gosecrets)
 [![Documentation](https://godoc.org/github.com/bilustek/gosecrets?status.svg)](https://pkg.go.dev/github.com/bilustek/gosecrets)
 [![Go Report Card](https://goreportcard.com/badge/github.com/bilustek/gosecrets)](https://goreportcard.com/report/github.com/bilustek/gosecrets)
