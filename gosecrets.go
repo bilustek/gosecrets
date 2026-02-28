@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ type Secrets struct {
 }
 
 type config struct {
+	env       string
 	storeOpts []store.Option
 }
 
@@ -52,18 +54,19 @@ func WithRoot(root string) Option {
 
 // WithEnv sets environment-specific credential files.
 // For example, WithEnv("production") reads production.enc with production.key.
+// This overrides the GOSECRETS_ENV environment variable.
 func WithEnv(env string) Option {
 	return func(c *config) error {
 		if env == "" {
 			return errors.New("env cannot be empty")
 		}
-		c.storeOpts = append(c.storeOpts, store.WithEnv(env))
+		c.env = env
 		return nil
 	}
 }
 
 // Load reads and decrypts the credentials.
-// Without options, it reads from ./secrets/ using the default key resolution.
+// Environment resolution order: WithEnv() > GOSECRETS_ENV > "development".
 //
 //	secrets, err := gosecrets.Load()
 //	secrets, err := gosecrets.Load(gosecrets.WithRoot("/app"), gosecrets.WithEnv("production"))
@@ -75,7 +78,18 @@ func Load(opts ...Option) (*Secrets, error) {
 		}
 	}
 
-	s, err := store.New(cfg.storeOpts...)
+	env := cfg.env
+	if env == "" {
+		env = os.Getenv(store.EnvEnv)
+	}
+
+	if env == "" {
+		env = store.DefaultEnv
+	}
+
+	storeOpts := append(cfg.storeOpts, store.WithEnv(env))
+
+	s, err := store.New(storeOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("gosecrets: %w", err)
 	}

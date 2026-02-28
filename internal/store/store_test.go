@@ -40,12 +40,12 @@ func TestNewReturnsDefaultStore(t *testing.T) {
 		t.Fatalf("expected default dir %q, got %q", "secrets", s.Dir())
 	}
 
-	if s.CredentialsFile() != "credentials.enc" {
-		t.Fatalf("expected default credentials file %q, got %q", "credentials.enc", s.CredentialsFile())
+	if s.CredentialsFile() != "development.enc" {
+		t.Fatalf("expected default credentials file %q, got %q", "development.enc", s.CredentialsFile())
 	}
 
-	if s.KeyFile() != "master.key" {
-		t.Fatalf("expected default key file %q, got %q", "master.key", s.KeyFile())
+	if s.KeyFile() != "development.key" {
+		t.Fatalf("expected default key file %q, got %q", "development.key", s.KeyFile())
 	}
 }
 
@@ -338,7 +338,7 @@ func TestCredentialsPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := "/app/secrets/credentials.enc"
+	want := "/app/secrets/development.enc"
 	if got := s.CredentialsPath(); got != want {
 		t.Fatalf("expected credentials path %q, got %q", want, got)
 	}
@@ -352,7 +352,7 @@ func TestKeyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := "/app/secrets/master.key"
+	want := "/app/secrets/development.key"
 	if got := s.KeyPath(); got != want {
 		t.Fatalf("expected key path %q, got %q", want, got)
 	}

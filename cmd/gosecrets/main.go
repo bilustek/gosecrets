@@ -21,12 +21,13 @@ Usage:
   gosecrets help                   Show this help
 
 Environment:
-  GOSECRETS_MASTER_KEY             Master key (overrides key file)
+  GOSECRETS_ENV                    Environment name (default: development)
+  GOSECRETS_MASTER_KEY             Master key (overrides all key files)
   GOSECRETS_<ENV>_KEY              Environment-specific key (e.g. GOSECRETS_PRODUCTION_KEY)
   EDITOR / VISUAL                  Preferred text editor
 
 Examples:
-  gosecrets init                   Creates secrets/master.key + secrets/credentials.enc
+  gosecrets init                   Creates secrets/development.key + secrets/development.enc
   gosecrets init --env production  Creates secrets/production.key + secrets/production.enc
   gosecrets edit                   Opens credentials in your editor
   gosecrets get database.password  Prints a specific value
@@ -48,7 +49,7 @@ func run(args []string) error {
 		return nil
 	}
 
-	env := extractEnv(&args)
+	env := resolveEnv(&args)
 
 	if len(args) == 0 {
 		fmt.Print(usage)
@@ -187,26 +188,14 @@ func newStore(env string) (*store.Store, error) {
 }
 
 func buildStoreOpts(env string) []store.Option {
-	var opts []store.Option
-
-	if env != "" {
-		opts = append(opts, store.WithEnv(env))
-	}
-
-	return opts
+	return []store.Option{store.WithEnv(env)}
 }
 
 func buildLoadOpts(env string) []gosecrets.Option {
-	var opts []gosecrets.Option
-
-	if env != "" {
-		opts = append(opts, gosecrets.WithEnv(env))
-	}
-
-	return opts
+	return []gosecrets.Option{gosecrets.WithEnv(env)}
 }
 
-func extractEnv(args *[]string) string {
+func resolveEnv(args *[]string) string {
 	for i, arg := range *args {
 		if arg == "--env" && i+1 < len(*args) {
 			env := (*args)[i+1]
@@ -223,5 +212,9 @@ func extractEnv(args *[]string) string {
 		}
 	}
 
-	return ""
+	if env := os.Getenv(store.EnvEnv); env != "" {
+		return env
+	}
+
+	return store.DefaultEnv
 }

@@ -59,14 +59,14 @@ func TestRunOnlyEnvFlag(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// extractEnv tests (parallel — pure function)
+// resolveEnv tests
 // ---------------------------------------------------------------------------
 
-func TestExtractEnvWithFlag(t *testing.T) {
+func TestResolveEnvWithFlag(t *testing.T) {
 	t.Parallel()
 
 	args := []string{"init", "--env", "production"}
-	env := extractEnv(&args)
+	env := resolveEnv(&args)
 
 	if env != "production" {
 		t.Fatalf("expected env %q, got %q", "production", env)
@@ -77,11 +77,11 @@ func TestExtractEnvWithFlag(t *testing.T) {
 	}
 }
 
-func TestExtractEnvWithEquals(t *testing.T) {
+func TestResolveEnvWithEquals(t *testing.T) {
 	t.Parallel()
 
 	args := []string{"init", "--env=staging"}
-	env := extractEnv(&args)
+	env := resolveEnv(&args)
 
 	if env != "staging" {
 		t.Fatalf("expected env %q, got %q", "staging", env)
@@ -92,14 +92,15 @@ func TestExtractEnvWithEquals(t *testing.T) {
 	}
 }
 
-func TestExtractEnvWithoutFlag(t *testing.T) {
-	t.Parallel()
-
+func TestResolveEnvWithoutFlag(t *testing.T) {
 	args := []string{"init"}
-	env := extractEnv(&args)
 
-	if env != "" {
-		t.Fatalf("expected empty env, got %q", env)
+	t.Setenv(store.EnvEnv, "")
+
+	env := resolveEnv(&args)
+
+	if env != store.DefaultEnv {
+		t.Fatalf("expected env %q, got %q", store.DefaultEnv, env)
 	}
 
 	if len(args) != 1 || args[0] != "init" {
@@ -107,11 +108,27 @@ func TestExtractEnvWithoutFlag(t *testing.T) {
 	}
 }
 
-func TestExtractEnvAtBeginning(t *testing.T) {
+func TestResolveEnvFromEnvVar(t *testing.T) {
+	args := []string{"init"}
+
+	t.Setenv(store.EnvEnv, "staging")
+
+	env := resolveEnv(&args)
+
+	if env != "staging" {
+		t.Fatalf("expected env %q, got %q", "staging", env)
+	}
+
+	if len(args) != 1 || args[0] != "init" {
+		t.Fatalf("expected args [init], got %v", args)
+	}
+}
+
+func TestResolveEnvAtBeginning(t *testing.T) {
 	t.Parallel()
 
 	args := []string{"--env", "test", "show"}
-	env := extractEnv(&args)
+	env := resolveEnv(&args)
 
 	if env != "test" {
 		t.Fatalf("expected env %q, got %q", "test", env)
@@ -148,12 +165,7 @@ func chdirTemp(t *testing.T, dir string) {
 func setupStore(t *testing.T, dir, env string, content []byte) {
 	t.Helper()
 
-	var opts []store.Option
-	if env != "" {
-		opts = append(opts, store.WithEnv(env))
-	}
-
-	opts = append(opts, store.WithRoot(dir))
+	opts := []store.Option{store.WithEnv(env), store.WithRoot(dir)}
 
 	s, err := store.New(opts...)
 	if err != nil {
@@ -180,16 +192,16 @@ func TestCmdInit(t *testing.T) {
 	dir := t.TempDir()
 	chdirTemp(t, dir)
 
-	if err := cmdInit(""); err != nil {
+	if err := cmdInit(store.DefaultEnv); err != nil {
 		t.Fatalf("cmdInit() error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join("secrets", "master.key")); err != nil {
-		t.Fatalf("master.key should exist: %v", err)
+	if _, err := os.Stat(filepath.Join("secrets", "development.key")); err != nil {
+		t.Fatalf("development.key should exist: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join("secrets", "credentials.enc")); err != nil {
-		t.Fatalf("credentials.enc should exist: %v", err)
+	if _, err := os.Stat(filepath.Join("secrets", "development.enc")); err != nil {
+		t.Fatalf("development.enc should exist: %v", err)
 	}
 }
 
@@ -214,11 +226,11 @@ func TestCmdInitRejectsDouble(t *testing.T) {
 	dir := t.TempDir()
 	chdirTemp(t, dir)
 
-	if err := cmdInit(""); err != nil {
+	if err := cmdInit(store.DefaultEnv); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := cmdInit(""); err == nil {
+	if err := cmdInit(store.DefaultEnv); err == nil {
 		t.Fatal("expected error on second init, got nil")
 	} else if !strings.Contains(err.Error(), "already initialized") {
 		t.Fatalf("expected error to contain %q, got: %v", "already initialized", err)
@@ -232,9 +244,9 @@ func TestCmdInitRejectsDouble(t *testing.T) {
 func TestCmdShow(t *testing.T) {
 	dir := t.TempDir()
 	chdirTemp(t, dir)
-	setupStore(t, dir, "", []byte("api_key: show-test\n"))
+	setupStore(t, dir, store.DefaultEnv, []byte("api_key: show-test\n"))
 
-	if err := cmdShow(""); err != nil {
+	if err := cmdShow(store.DefaultEnv); err != nil {
 		t.Fatalf("cmdShow() error = %v", err)
 	}
 }
@@ -245,7 +257,7 @@ func TestCmdShowFailsWithoutKey(t *testing.T) {
 
 	t.Setenv(store.EnvMasterKey, "")
 
-	if err := cmdShow(""); err == nil {
+	if err := cmdShow(store.DefaultEnv); err == nil {
 		t.Fatal("expected error when master key is missing, got nil")
 	}
 }
@@ -257,9 +269,9 @@ func TestCmdShowFailsWithoutKey(t *testing.T) {
 func TestCmdGet(t *testing.T) {
 	dir := t.TempDir()
 	chdirTemp(t, dir)
-	setupStore(t, dir, "", []byte("api_key: get-test-123\ndatabase:\n  host: localhost\n"))
+	setupStore(t, dir, store.DefaultEnv, []byte("api_key: get-test-123\ndatabase:\n  host: localhost\n"))
 
-	if err := cmdGet("api_key", ""); err != nil {
+	if err := cmdGet("api_key", store.DefaultEnv); err != nil {
 		t.Fatalf("cmdGet(api_key) error = %v", err)
 	}
 }
@@ -267,9 +279,9 @@ func TestCmdGet(t *testing.T) {
 func TestCmdGetDotNotation(t *testing.T) {
 	dir := t.TempDir()
 	chdirTemp(t, dir)
-	setupStore(t, dir, "", []byte("database:\n  host: localhost\n"))
+	setupStore(t, dir, store.DefaultEnv, []byte("database:\n  host: localhost\n"))
 
-	if err := cmdGet("database.host", ""); err != nil {
+	if err := cmdGet("database.host", store.DefaultEnv); err != nil {
 		t.Fatalf("cmdGet(database.host) error = %v", err)
 	}
 }
@@ -277,9 +289,9 @@ func TestCmdGetDotNotation(t *testing.T) {
 func TestCmdGetMissingKey(t *testing.T) {
 	dir := t.TempDir()
 	chdirTemp(t, dir)
-	setupStore(t, dir, "", []byte("api_key: value\n"))
+	setupStore(t, dir, store.DefaultEnv, []byte("api_key: value\n"))
 
-	if err := cmdGet("nonexistent", ""); err == nil {
+	if err := cmdGet("nonexistent", store.DefaultEnv); err == nil {
 		t.Fatal("expected error for missing key, got nil")
 	} else if !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("expected error to contain %q, got: %v", "not found", err)

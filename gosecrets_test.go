@@ -205,6 +205,75 @@ func TestLoadFailsWithInvalidYAML(t *testing.T) {
 	}
 }
 
+func TestLoadAutoDetectsEnvFromEnvVar(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a "staging" store
+	s, err := store.New(store.WithRoot(dir), store.WithEnv("staging"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	masterKey, err := s.Init()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	content := []byte("api_key: staging-key-789\n")
+	if err = s.WriteCredentials(content, masterKey); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set GOSECRETS_ENV=staging so Load() picks it up automatically
+	t.Setenv(store.EnvEnv, "staging")
+	t.Setenv(store.EnvMasterKey, masterKey)
+
+	// Load without WithEnv — should auto-detect "staging"
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	got := secrets.String("api_key")
+	if got != "staging-key-789" {
+		t.Errorf("String(api_key) = %q, want %q", got, "staging-key-789")
+	}
+}
+
+func TestLoadWithEnvOverridesEnvVar(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a "production" store
+	s, err := store.New(store.WithRoot(dir), store.WithEnv("production"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	masterKey, err := s.Init()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	content := []byte("api_key: prod-override\n")
+	if err = s.WriteCredentials(content, masterKey); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set GOSECRETS_ENV=staging but explicitly pass WithEnv("production")
+	t.Setenv(store.EnvEnv, "staging")
+	t.Setenv(store.EnvMasterKey, masterKey)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir), gosecrets.WithEnv("production"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	got := secrets.String("api_key")
+	if got != "prod-override" {
+		t.Errorf("String(api_key) = %q, want %q", got, "prod-override")
+	}
+}
+
 // --- Accessor tests (NOT parallel — uses t.Setenv via setupTestStore) ---
 
 func TestGetDotNotation(t *testing.T) {

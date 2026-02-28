@@ -21,7 +21,7 @@ a clean API.
 First, create stores for development and production environments:
 
 ```bash
-gosecrets init                    # secrets/master.key + secrets/credentials.enc
+gosecrets init                    # secrets/development.key + secrets/development.enc
 gosecrets init --env production   # secrets/production.key + secrets/production.enc
 ```
 
@@ -47,16 +47,10 @@ Fix your `.gitignore` file
 
 Keep this in mind! **NEVER COMMIT** `*.key` files!
 
-Now, in your go project;
+Now, in your Go project, your code is **the same everywhere**:
 
 ```go
-secrets, err := gosecrets.Load() // for development variables
-```
-
-For production;
-
-```go
-secrets, err := gosecrets.Load(gosecrets.WithEnv("production"))
+secrets, err := gosecrets.Load()
 if err != nil {
     // handle your error
 }
@@ -66,59 +60,56 @@ fmt.Println(secrets.String("stripe.key"))
 // production:  sk_live_yyy
 ```
 
-You can choose any environment name, such as `foo`;
+`gosecrets.Load()` picks the environment automatically from `GOSECRETS_ENV`.
+Default is `development`. In production, just set:
 
 ```bash
-export GOSECRETS_FOO_KEY="my-super-secret-foo-key"
-gosecrets init --env foo
+export GOSECRETS_ENV=production
+export GOSECRETS_PRODUCTION_KEY="your-master-key-here"
+
+# or whatever your env is:
+# export GOSECRETS_STAGING_KEY="your-master-key-here"
+# export GOSECRETS_FOO_KEY="your-master-key-here"
 ```
 
-Then in your go project;
+You can choose any environment name, such as `foo`:
+
+```bash
+export GOSECRETS_ENV=foo
+gosecrets init                     # creates secrets/foo.key + secrets/foo.enc
+gosecrets edit                     # add your secrets
+```
 
 ```go
-secrets, err := gosecrets.Load(gosecrets.WithEnv("foo"))
+secrets, err := gosecrets.Load()   // picks up GOSECRETS_ENV=foo automatically
 ```
 
-| Environment | .enc file | key from? | ENV VAR |
-|:------------|:-----|:-----|:-----|
-| development | `secrets/credentials.enc` | `secrets/master.key` (disc) | not required |
-| production  | `secrets/production.enc` | env vars | `GOSECRETS_PRODUCTION_KEY` |
-| <any-name>  | `secrets/<any-name>.enc` | env vars | `GOSECRETS_<ANY-NAME>_KEY` |
+| Environment | `GOSECRETS_ENV` | .enc file | Key from | Key ENV VAR |
+|:------------|:-----|:-----|:-----|:-----|
+| development | _(empty or unset)_ | `secrets/development.enc` | `secrets/development.key` (disk) | `GOSECRETS_DEVELOPMENT_KEY` |
+| production  | `production` | `secrets/production.enc` | env var | `GOSECRETS_PRODUCTION_KEY` |
+| \<any-name\>  | `<any-name>` | `secrets/<any-name>.enc` | env var | `GOSECRETS_<ANY-NAME>_KEY` |
 
 
 ---
 
 ## How It Works ?
 
-`gosecrets` stores your secrets **encrypted inside your repository**. Only 
+`gosecrets` stores your secrets **encrypted inside your repository**. Only
 **the master key** stays **outside version control**.
 
-After running `gosecrets init`, your project gets:
+Each environment gets its own `.enc` / `.key` pair inside `secrets/`:
 
     your-project/
     ├── secrets/
-    │   ├── credentials.enc   # encrypted YAML — committed to git
-    │   └── master.key        # decryption key — add to .gitignore!
-
-With `--env` flag, each environment gets its own pair:
-
-    your-project/
-    ├── secrets/
-    │   ├── credentials.enc
-    │   ├── master.key
+    │   ├── development.enc   # encrypted YAML — committed to git
+    │   ├── development.key   # decryption key — add to .gitignore!
     │   ├── production.enc
-    │   ├── production.key
-    │   ├── staging.enc
-    │   └── staging.key
-
-The master key is resolved in this order:
-
-1. `GOSECRETS_MASTER_KEY` environment variable
-1. `GOSECRETS_<ENV>_KEY` environment variable (e.g. `GOSECRETS_PRODUCTION_KEY`)
-1. Key file on disk (`secrets/master.key` or `secrets/<env>.key`)
+    │   └── production.key
 
 In **development**, the key file on disk is enough. In **production/CI**, set
-the environment variable and never deploy the key file.
+`GOSECRETS_<ENV>_KEY` (e.g. `GOSECRETS_PRODUCTION_KEY`) as an environment
+variable and never deploy the key file.
 
 ---
 
@@ -129,14 +120,14 @@ Each write generates a fresh random nonce - the same plaintext produces
 different **ciphertext** every time.
 
     ┌──────────┐     ┌──────────────┐     ┌─────────────────┐
-    │ You edit │────▶│ gosecrets    │────▶│ credentials.enc │
+    │ You edit │────▶│ gosecrets    │────▶│ <env>.enc       │
     │ YAML     │     │ encrypts     │     │ (committed)     │
     └──────────┘     └──────────────┘     └─────────────────┘
     
     ┌──────────┐     ┌──────────────┐     ┌─────────────────┐
-    │ Your app │◀────│ gosecrets    │◀────│ credentials.enc │
+    │ Your app │◀────│ gosecrets    │◀────│ <env>.enc       │
     │ reads    │     │ decrypts     │     │ + master key    │
-    └──────────┘      └──────────────┘     └─────────────────┘
+    └──────────┘     └──────────────┘     └─────────────────┘
 
 ---
 
@@ -151,14 +142,8 @@ go get -u github.com/bilustek/gosecrets
 CLI Tool:
 
 ```bash
-go install github.com/bilustek/gosecrets@latest
+go install github.com/bilustek/gosecrets/cmd/gosecrets@latest
 ```
-
----
-
-## Usage
-
-@wip
 
 ---
 

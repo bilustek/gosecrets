@@ -12,12 +12,19 @@ import (
 )
 
 const (
-	// EnvMasterKey is the environment variable name for the master key.
+	// EnvMasterKey is the environment variable name for the master key (universal override).
 	EnvMasterKey = "GOSECRETS_MASTER_KEY"
 
+	// EnvEnv is the environment variable that determines which credential files to use.
+	// When not set, defaults to DefaultEnv ("development").
+	EnvEnv = "GOSECRETS_ENV"
+
+	// DefaultEnv is the default environment name when GOSECRETS_ENV is not set.
+	DefaultEnv = "development"
+
 	defaultDir             = "secrets"
-	defaultCredentialsFile = "credentials.enc"
-	defaultKeyFile         = "master.key"
+	defaultCredentialsFile = DefaultEnv + ".enc"
+	defaultKeyFile         = DefaultEnv + ".key"
 
 	permDir  = 0o750
 	permFile = 0o600
@@ -147,13 +154,11 @@ func (s *Store) MasterKey() (string, error) {
 		return strings.TrimSpace(key), nil
 	}
 
-	// Check env-specific env var (e.g. GOSECRETS_PRODUCTION_KEY)
-	if s.keyFile != defaultKeyFile {
-		env := strings.TrimSuffix(s.keyFile, ".key")
-		envVar := "GOSECRETS_" + strings.ToUpper(env) + "_KEY"
-		if key := os.Getenv(envVar); key != "" {
-			return strings.TrimSpace(key), nil
-		}
+	// Check env-specific env var (e.g. GOSECRETS_DEVELOPMENT_KEY, GOSECRETS_PRODUCTION_KEY)
+	env := strings.TrimSuffix(s.keyFile, ".key")
+	envVar := "GOSECRETS_" + strings.ToUpper(env) + "_KEY"
+	if key := os.Getenv(envVar); key != "" {
+		return strings.TrimSpace(key), nil
 	}
 
 	// Read from file
