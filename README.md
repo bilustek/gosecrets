@@ -113,8 +113,8 @@ Each environment gets its own `.enc` / `.key` pair inside `secrets/`:
     ├── secrets/
     │   ├── development.enc   # encrypted YAML — committed to git
     │   ├── development.key   # decryption key — add to .gitignore!
-    │   ├── production.enc
-    │   └── production.key
+    │   ├── production.enc    # encrypted YAML — committed to git
+    │   └── production.key    # decryption key — add to .gitignore!
 
 In **development**, the key file on disk is enough. In **production/CI**, set
 `GOSECRETS_<ENV>_KEY` (e.g. `GOSECRETS_PRODUCTION_KEY`) as an environment
@@ -155,7 +155,11 @@ CLI Tool:
 
 ```bash
 go install github.com/bilustek/gosecrets/cmd/gosecrets@latest
+```
 
+Run `gosecrets`:
+
+```bash
 $ gosecrets
 
 gosecrets - encrypted credentials for Go projects
@@ -165,8 +169,8 @@ Usage:
   gosecrets edit [--env ENV]       Edit credentials in $EDITOR
   gosecrets show [--env ENV]       Print decrypted credentials to stdout
   gosecrets get KEY [--env ENV]    Get a specific value (dot notation)
-  gosecrets version                Show version
-  gosecrets help                   Show this help
+  gosecrets version, --version, -v Show version
+  gosecrets help, --help, -h       Show this help
 
 Environment:
   GOSECRETS_ENV                    Environment name (default: development)
@@ -194,29 +198,68 @@ secrets, err := gosecrets.Load()
 | Method | Return | Zero value | Description |
 |:-------|:-------|:-----------|:------------|
 | `Get(key)` | `any` | `nil` | Raw value |
-| `String(key)` | `string` | `""` | String representation |
-| `Int(key)` | `int` | `0` | Integer value |
-| `Int64(key)` | `int64` | `0` | 64-bit integer value |
-| `Float64(key)` | `float64` | `0` | Floating point value |
-| `Bool(key)` | `bool` | `false` | Boolean value |
-| `Duration(key)` | `time.Duration` | `0` | Parses `"5s"`, `"1h30m"`, etc. |
-| `Map(key)` | `map[string]any` | `nil` | Nested map |
+| `String(key, fallback...)` | `string` | `""` | String representation |
+| `Int(key, fallback...)` | `int` | `0` | Integer value |
+| `Int64(key, fallback...)` | `int64` | `0` | 64-bit integer value |
+| `Float64(key, fallback...)` | `float64` | `0` | Floating point value |
+| `Bool(key, fallback...)` | `bool` | `false` | Boolean value |
+| `Duration(key, fallback...)` | `time.Duration` | `0` | Parses `"5s"`, `"1h30m"`, etc. |
+| `Map(key, fallback...)` | `map[string]any` | `nil` | Nested map |
+| `TCPAddr(key, fallback...)` | `*net.TCPAddr` | `nil` | Parses `"host:port"` via `net.ResolveTCPAddr` |
 | `Has(key)` | `bool` | `false` | Check if key exists |
 | `All()` | `map[string]any` | — | Entire credentials map |
 | `MustGet(key)` | `any` | **panic** | Like `Get`, panics if missing |
 | `MustString(key)` | `string` | **panic** | Like `String`, panics if missing |
+| `MustTCPAddr(key)` | `*net.TCPAddr` | **panic** | Like `TCPAddr`, panics if missing or invalid |
+
+All accessors (except `Get`, `Has`, `All`, and `Must*` variants) accept an
+optional fallback value. If the key doesn't exist, the fallback is returned
+instead of the zero value:
+
+```go
+// without fallback — returns zero value when key is missing
+host := secrets.String("database.host")           // ""
+
+// with fallback — returns fallback when key is missing
+host := secrets.String("database.host", "0.0.0.0") // "0.0.0.0"
+```
 
 ```go
 // examples
-host := secrets.String("database.host")      // "localhost"
-port := secrets.Int("database.port")          // 5432
-pi := secrets.Float64("pi")                   // 3.14
-debug := secrets.Bool("debug")                // true
-timeout := secrets.Duration("timeout")        // 5s
-db := secrets.Map("database")                 // map[string]any{...}
+host := secrets.String("database.host")               // "localhost"
+port := secrets.Int("database.port")                   // 5432
+pi := secrets.Float64("pi")                            // 3.14
+debug := secrets.Bool("debug")                         // true
+timeout := secrets.Duration("timeout")                 // 5s
+db := secrets.Map("database")                          // map[string]any{...}
+redis := secrets.TCPAddr("redis_addr")                 // *net.TCPAddr{IP: ..., Port: 6379}
 
-apiKey := secrets.MustString("api_key")       // panics if not found
+// with fallback values
+host = secrets.String("cache.host", "localhost")       // "localhost" if missing
+port = secrets.Int("cache.port", 6379)                 // 6379 if missing
+timeout = secrets.Duration("cache.ttl", 5*time.Minute) // 5m if missing
+redis = secrets.TCPAddr("cache.addr", "localhost:6379") // parsed fallback if missing
+
+// must variants — panic if missing (use at startup)
+apiKey := secrets.MustString("api_key")                // panics if not found
+addr := secrets.MustTCPAddr("redis_addr")              // panics if not found or invalid
 ```
+
+---
+
+## Change Log
+
+**2026-03-01**
+
+- Add optional fallback values to all accessors: `String`, `Int`, `Int64`, `Float64`, `Bool`, `Duration`, `Map`
+- Add `TCPAddr(key, fallback...)` method for resolving `"host:port"` strings to `*net.TCPAddr`
+- Add `MustTCPAddr(key)` method that panics if key is missing or address is invalid
+- Add `--version`, `-v`, `--help`, `-h` flags to CLI usage output
+
+**2026-02-28**
+
+- Fix save (edit) bug `v0.1.1`
+- Initial release `v0.1.0`
 
 ---
 

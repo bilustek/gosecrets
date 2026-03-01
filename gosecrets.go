@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -137,10 +138,14 @@ func (s *Secrets) Get(key string) any {
 }
 
 // String retrieves a string value using dot notation.
-// Returns empty string if the key doesn't exist or isn't a string.
-func (s *Secrets) String(key string) string {
+// Returns fallback (or empty string) if the key doesn't exist.
+func (s *Secrets) String(key string, fallback ...string) string {
 	v := s.Get(key)
 	if v == nil {
+		if len(fallback) > 0 {
+			return fallback[0]
+		}
+
 		return ""
 	}
 
@@ -153,10 +158,14 @@ func (s *Secrets) String(key string) string {
 }
 
 // Int retrieves an integer value using dot notation.
-// Returns 0 if the key doesn't exist or isn't numeric.
-func (s *Secrets) Int(key string) int {
+// Returns fallback (or 0) if the key doesn't exist or isn't numeric.
+func (s *Secrets) Int(key string, fallback ...int) int {
 	v := s.Get(key)
 	if v == nil {
+		if len(fallback) > 0 {
+			return fallback[0]
+		}
+
 		return 0
 	}
 
@@ -176,10 +185,14 @@ func (s *Secrets) Int(key string) int {
 }
 
 // Int64 retrieves an int64 value using dot notation.
-// Returns 0 if the key doesn't exist or isn't numeric.
-func (s *Secrets) Int64(key string) int64 {
+// Returns fallback (or 0) if the key doesn't exist or isn't numeric.
+func (s *Secrets) Int64(key string, fallback ...int64) int64 {
 	v := s.Get(key)
 	if v == nil {
+		if len(fallback) > 0 {
+			return fallback[0]
+		}
+
 		return 0
 	}
 
@@ -199,10 +212,14 @@ func (s *Secrets) Int64(key string) int64 {
 }
 
 // Float64 retrieves a float64 value using dot notation.
-// Returns 0 if the key doesn't exist or isn't numeric.
-func (s *Secrets) Float64(key string) float64 {
+// Returns fallback (or 0) if the key doesn't exist or isn't numeric.
+func (s *Secrets) Float64(key string, fallback ...float64) float64 {
 	v := s.Get(key)
 	if v == nil {
+		if len(fallback) > 0 {
+			return fallback[0]
+		}
+
 		return 0
 	}
 
@@ -220,10 +237,14 @@ func (s *Secrets) Float64(key string) float64 {
 
 // Duration retrieves a time.Duration value using dot notation.
 // The value must be a string parseable by time.ParseDuration (e.g., "5s", "1h30m").
-// Returns 0 if the key doesn't exist, isn't a string, or can't be parsed.
-func (s *Secrets) Duration(key string) time.Duration {
+// Returns fallback (or 0) if the key doesn't exist, isn't a string, or can't be parsed.
+func (s *Secrets) Duration(key string, fallback ...time.Duration) time.Duration {
 	v := s.Get(key)
 	if v == nil {
+		if len(fallback) > 0 {
+			return fallback[0]
+		}
+
 		return 0
 	}
 
@@ -241,10 +262,14 @@ func (s *Secrets) Duration(key string) time.Duration {
 }
 
 // Bool retrieves a boolean value using dot notation.
-// Returns false if the key doesn't exist or isn't a bool.
-func (s *Secrets) Bool(key string) bool {
+// Returns fallback (or false) if the key doesn't exist or isn't a bool.
+func (s *Secrets) Bool(key string, fallback ...bool) bool {
 	v := s.Get(key)
 	if v == nil {
+		if len(fallback) > 0 {
+			return fallback[0]
+		}
+
 		return false
 	}
 
@@ -257,10 +282,14 @@ func (s *Secrets) Bool(key string) bool {
 }
 
 // Map retrieves a nested map using dot notation.
-// Returns nil if the key doesn't exist or isn't a map.
-func (s *Secrets) Map(key string) map[string]any {
+// Returns fallback (or nil) if the key doesn't exist or isn't a map.
+func (s *Secrets) Map(key string, fallback ...map[string]any) map[string]any {
 	v := s.Get(key)
 	if v == nil {
+		if len(fallback) > 0 {
+			return fallback[0]
+		}
+
 		return nil
 	}
 
@@ -270,6 +299,62 @@ func (s *Secrets) Map(key string) map[string]any {
 	}
 
 	return m
+}
+
+// TCPAddr retrieves a TCP address value using dot notation.
+// The value must be a string parseable by net.ResolveTCPAddr (e.g., "localhost:5432").
+// Returns fallback parsed address (or nil) if the key doesn't exist or can't be resolved.
+func (s *Secrets) TCPAddr(key string, fallback ...string) *net.TCPAddr {
+	v := s.Get(key)
+
+	var str string
+
+	if v == nil {
+		if len(fallback) == 0 {
+			return nil
+		}
+
+		str = fallback[0]
+	} else {
+		switch val := v.(type) {
+		case string:
+			str = val
+		default:
+			str = fmt.Sprintf("%v", val)
+		}
+	}
+
+	addr, err := net.ResolveTCPAddr("tcp", str)
+	if err != nil {
+		return nil
+	}
+
+	return addr
+}
+
+// MustTCPAddr is like TCPAddr but panics if the key doesn't exist or isn't a valid TCP address.
+// Use this for required network addresses during application startup.
+func (s *Secrets) MustTCPAddr(key string) *net.TCPAddr {
+	v := s.Get(key)
+	if v == nil {
+		panic(fmt.Sprintf("gosecrets: required key %q not found", key))
+	}
+
+	var str string
+
+	switch val := v.(type) {
+	case string:
+		str = val
+	default:
+		str = fmt.Sprintf("%v", val)
+	}
+
+	addr, err := net.ResolveTCPAddr("tcp", str)
+	if err != nil {
+		panic(fmt.Sprintf("gosecrets: key %q is not a valid TCP address: %v", key, err))
+	}
+
+	return addr
 }
 
 // MustGet is like Get but panics if the key doesn't exist.
