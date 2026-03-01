@@ -1,6 +1,7 @@
 package gosecrets_test
 
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,7 +29,8 @@ func setupTestStore(t *testing.T) string {
 
 	content := []byte("database:\n  host: localhost\n  port: 5432\n  password: supersecret\n" +
 		"api_key: sk-123\nenabled: true\ncount: 42\nnegative: -7\npi: 3.14\n" +
-		"huge: 18446744073709551615\ntimeout: 5s\nretry_delay: 500ms\n")
+		"huge: 18446744073709551615\ntimeout: 5s\nretry_delay: 500ms\n" +
+		"redis_addr: \"localhost:6379\"\nbad_addr: not-a-valid-addr\n")
 	if err = s.WriteCredentials(content, masterKey); err != nil {
 		t.Fatal(err)
 	}
@@ -631,4 +633,282 @@ func TestMustStringPanicsForMissingKey(t *testing.T) {
 	}()
 
 	secrets.MustString("nonexistent")
+}
+
+// --- Fallback tests (NOT parallel — uses t.Setenv via setupTestStore) ---
+
+func TestStringFallback(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := secrets.String("nonexistent", "default-val"); got != "default-val" {
+		t.Errorf("String(nonexistent, fallback) = %q, want %q", got, "default-val")
+	}
+
+	if got := secrets.String("api_key", "fallback"); got != "sk-123" {
+		t.Errorf("String(api_key, fallback) = %q, want %q (existing key should ignore fallback)", got, "sk-123")
+	}
+}
+
+func TestIntFallback(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := secrets.Int("nonexistent", 9999); got != 9999 {
+		t.Errorf("Int(nonexistent, 9999) = %d, want %d", got, 9999)
+	}
+
+	if got := secrets.Int("count", 9999); got != 42 {
+		t.Errorf("Int(count, 9999) = %d, want %d (existing key should ignore fallback)", got, 42)
+	}
+}
+
+func TestInt64Fallback(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := secrets.Int64("nonexistent", 8888); got != 8888 {
+		t.Errorf("Int64(nonexistent, 8888) = %d, want %d", got, int64(8888))
+	}
+
+	if got := secrets.Int64("count", 8888); got != 42 {
+		t.Errorf("Int64(count, 8888) = %d, want %d (existing key should ignore fallback)", got, int64(42))
+	}
+}
+
+func TestFloat64Fallback(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := secrets.Float64("nonexistent", 1.23); got != 1.23 {
+		t.Errorf("Float64(nonexistent, 1.23) = %f, want %f", got, 1.23)
+	}
+
+	if got := secrets.Float64("pi", 1.23); got != 3.14 {
+		t.Errorf("Float64(pi, 1.23) = %f, want %f (existing key should ignore fallback)", got, 3.14)
+	}
+}
+
+func TestBoolFallback(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := secrets.Bool("nonexistent", true); !got {
+		t.Error("Bool(nonexistent, true) = false, want true")
+	}
+
+	if got := secrets.Bool("enabled", false); !got {
+		t.Error("Bool(enabled, false) = false, want true (existing key should ignore fallback)")
+	}
+}
+
+func TestDurationFallback(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	fb := 30 * time.Second
+	if got := secrets.Duration("nonexistent", fb); got != fb {
+		t.Errorf("Duration(nonexistent, 30s) = %v, want %v", got, fb)
+	}
+
+	if got := secrets.Duration("timeout", fb); got != 5*time.Second {
+		t.Errorf("Duration(timeout, 30s) = %v, want %v (existing key should ignore fallback)", got, 5*time.Second)
+	}
+}
+
+func TestMapFallback(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	fb := map[string]any{"default": true}
+	if got := secrets.Map("nonexistent", fb); got == nil || got["default"] != true {
+		t.Errorf("Map(nonexistent, fallback) = %v, want %v", got, fb)
+	}
+
+	if got := secrets.Map("database", fb); got["default"] == true {
+		t.Error("Map(database, fallback) returned fallback, want existing map")
+	}
+}
+
+// --- TCPAddr tests (NOT parallel — uses t.Setenv via setupTestStore) ---
+
+func TestTCPAddrResolvesValidAddress(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	got := secrets.TCPAddr("redis_addr")
+	if got == nil {
+		t.Fatal("TCPAddr(redis_addr) = nil, want non-nil")
+	}
+
+	if got.Port != 6379 {
+		t.Errorf("TCPAddr(redis_addr).Port = %d, want %d", got.Port, 6379)
+	}
+}
+
+func TestTCPAddrReturnsNilForMissingKey(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := secrets.TCPAddr("nonexistent"); got != nil {
+		t.Errorf("TCPAddr(nonexistent) = %v, want nil", got)
+	}
+}
+
+func TestTCPAddrReturnsNilForInvalidAddress(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if got := secrets.TCPAddr("bad_addr"); got != nil {
+		t.Errorf("TCPAddr(bad_addr) = %v, want nil", got)
+	}
+}
+
+func TestTCPAddrFallback(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	got := secrets.TCPAddr("nonexistent", "127.0.0.1:5432")
+	if got == nil {
+		t.Fatal("TCPAddr(nonexistent, fallback) = nil, want non-nil")
+	}
+
+	want := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 5432}
+	if !got.IP.Equal(want.IP) || got.Port != want.Port {
+		t.Errorf("TCPAddr(nonexistent, fallback) = %v, want %v", got, want)
+	}
+}
+
+func TestTCPAddrFallbackIgnoredWhenKeyExists(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	got := secrets.TCPAddr("redis_addr", "127.0.0.1:9999")
+	if got == nil {
+		t.Fatal("TCPAddr(redis_addr, fallback) = nil, want non-nil")
+	}
+
+	if got.Port != 6379 {
+		t.Errorf("TCPAddr(redis_addr, fallback).Port = %d, want %d (existing key should ignore fallback)", got.Port, 6379)
+	}
+}
+
+func TestMustTCPAddrResolvesValidAddress(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	got := secrets.MustTCPAddr("redis_addr")
+	if got == nil {
+		t.Fatal("MustTCPAddr(redis_addr) = nil, want non-nil")
+	}
+
+	if got.Port != 6379 {
+		t.Errorf("MustTCPAddr(redis_addr).Port = %d, want %d", got.Port, 6379)
+	}
+}
+
+func TestMustTCPAddrPanicsForMissingKey(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("MustTCPAddr(nonexistent) did not panic")
+		}
+
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("panic value is not a string: %v", r)
+		}
+
+		if !strings.Contains(msg, "nonexistent") {
+			t.Errorf("panic message %q does not contain key name %q", msg, "nonexistent")
+		}
+	}()
+
+	secrets.MustTCPAddr("nonexistent")
+}
+
+func TestMustTCPAddrPanicsForInvalidAddress(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("MustTCPAddr(bad_addr) did not panic")
+		}
+
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("panic value is not a string: %v", r)
+		}
+
+		if !strings.Contains(msg, "not a valid TCP address") {
+			t.Errorf("panic message %q does not contain expected text", msg)
+		}
+	}()
+
+	secrets.MustTCPAddr("bad_addr")
 }
