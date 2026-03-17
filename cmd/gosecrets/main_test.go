@@ -422,3 +422,95 @@ func TestRunInitWithEnvEqualsFlag(t *testing.T) {
 		t.Fatalf("production.key should exist: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// cmdCompleteKeys tests (NOT parallel — uses os.Chdir + t.Setenv)
+// ---------------------------------------------------------------------------
+
+func TestCmdCompleteKeys(t *testing.T) {
+	dir := t.TempDir()
+	chdirTemp(t, dir)
+	setupStore(t, dir, store.DefaultEnv, []byte("api_key: test\ndatabase:\n  host: localhost\n"))
+
+	out := captureStdout(t, func() {
+		if err := cmdCompleteKeys(store.DefaultEnv); err != nil {
+			t.Fatalf("cmdCompleteKeys() error = %v", err)
+		}
+	})
+
+	for _, want := range []string{"api_key", "database.host"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("cmdCompleteKeys() output missing %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestCmdCompleteKeysSilentOnError(t *testing.T) {
+	dir := t.TempDir()
+	chdirTemp(t, dir)
+
+	t.Setenv(store.EnvMasterKey, "")
+
+	// no store initialized — should return nil (no error), empty output
+	if err := cmdCompleteKeys(store.DefaultEnv); err != nil {
+		t.Fatalf("cmdCompleteKeys() should not error during completion, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// cmdCompletion tests (parallel — no filesystem or env mutation)
+// ---------------------------------------------------------------------------
+
+func TestCmdCompletionBash(t *testing.T) {
+	t.Parallel()
+
+	out := captureStdout(t, func() {
+		if err := cmdCompletion("bash"); err != nil {
+			t.Fatalf("cmdCompletion(bash) error = %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "_gosecrets") {
+		t.Errorf("bash completion should contain _gosecrets function, got:\n%s", out[:200])
+	}
+
+	if !strings.Contains(out, "complete -F _gosecrets gosecrets") {
+		t.Error("bash completion should register complete command")
+	}
+}
+
+func TestCmdCompletionUnsupportedShell(t *testing.T) {
+	t.Parallel()
+
+	if err := cmdCompletion("fish"); err == nil {
+		t.Fatal("expected error for unsupported shell, got nil")
+	} else if !strings.Contains(err.Error(), "unsupported shell") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunCompletion(t *testing.T) {
+	t.Parallel()
+
+	if err := run([]string{"completion", "bash"}); err != nil {
+		t.Fatalf("run(completion bash) error = %v", err)
+	}
+}
+
+func TestRunCompletionNoArgs(t *testing.T) {
+	t.Parallel()
+
+	if err := run([]string{"completion"}); err == nil {
+		t.Fatal("expected error for completion without shell arg, got nil")
+	}
+}
+
+func TestRunCompleteKeys(t *testing.T) {
+	dir := t.TempDir()
+	chdirTemp(t, dir)
+	setupStore(t, dir, store.DefaultEnv, []byte("api_key: test\n"))
+
+	if err := run([]string{"__complete-keys"}); err != nil {
+		t.Fatalf("run(__complete-keys) error = %v", err)
+	}
+}

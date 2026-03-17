@@ -514,6 +514,66 @@ func TestHas(t *testing.T) {
 	}
 }
 
+func TestKeys(t *testing.T) {
+	dir := setupTestStore(t)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	keys := secrets.Keys()
+	if len(keys) == 0 {
+		t.Fatal("Keys() returned empty slice")
+	}
+
+	keySet := make(map[string]bool)
+	for _, k := range keys {
+		keySet[k] = true
+	}
+
+	for _, want := range []string{"api_key", "database.host", "database.port", "database.password", "enabled"} {
+		if !keySet[want] {
+			t.Errorf("Keys() missing %q, got %v", want, keys)
+		}
+	}
+
+	// nested maps should not appear as keys, only leaf values
+	if keySet["database"] {
+		t.Error("Keys() should not contain non-leaf key \"database\"")
+	}
+}
+
+func TestKeysEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	s, err := store.New(store.WithRoot(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	masterKey, err := s.Init()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err = s.WriteCredentials([]byte(""), masterKey); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv(store.EnvMasterKey, masterKey)
+
+	secrets, err := gosecrets.Load(gosecrets.WithRoot(dir))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	keys := secrets.Keys()
+	if len(keys) != 0 {
+		t.Errorf("Keys() for empty credentials = %v, want empty", keys)
+	}
+}
+
 func TestAll(t *testing.T) {
 	dir := setupTestStore(t)
 

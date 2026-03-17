@@ -22,6 +22,7 @@ Usage:
   gosecrets get KEY [--env ENV]    Get a specific value (dot notation)
   gosecrets version, --version, -v Show version
   gosecrets help, --help, -h       Show this help
+  gosecrets completion bash        Output bash completion script
 
 Environment:
   GOSECRETS_ENV                    Environment name (default: development)
@@ -77,6 +78,14 @@ func run(args []string) error {
 		fmt.Println(version)
 
 		return nil
+	case "completion":
+		if len(args) < 2 {
+			return errors.New("usage: gosecrets completion bash")
+		}
+
+		return cmdCompletion(args[1])
+	case "__complete-keys":
+		return cmdCompleteKeys(env)
 	case "help", "--help", "-h":
 		fmt.Print(usage)
 
@@ -205,6 +214,119 @@ func buildStoreOpts(env string) []store.Option {
 func buildLoadOpts(env string) []gosecrets.Option {
 	return []gosecrets.Option{gosecrets.WithEnv(env)}
 }
+
+func cmdCompleteKeys(env string) error {
+	secrets, err := gosecrets.Load(buildLoadOpts(env)...)
+	if err != nil {
+		return nil //nolint:nilerr // silence errors during completion
+	}
+
+	for _, key := range secrets.Keys() {
+		fmt.Println(key)
+	}
+
+	return nil
+}
+
+func cmdCompletion(shell string) error {
+	switch shell {
+	case "bash":
+		fmt.Print(bashCompletionScript)
+
+		return nil
+	default:
+		return fmt.Errorf("unsupported shell: %s (supported: bash)", shell)
+	}
+}
+
+const bashCompletionScript = `_gosecrets() {
+    local cur prev words cword
+    _init_completion || return
+
+    local commands="init edit show get version help completion"
+
+    # Find the subcommand position
+    local subcmd=""
+    local subcmd_idx=0
+    local i
+    for ((i=1; i < cword; i++)); do
+        case "${words[i]}" in
+            --env|--env=*)
+                # skip --env and its argument
+                if [[ "${words[i]}" == "--env" ]]; then
+                    ((i++))
+                fi
+                ;;
+            -*)
+                ;;
+            *)
+                subcmd="${words[i]}"
+                subcmd_idx=$i
+                break
+                ;;
+        esac
+    done
+
+    # Complete --env value
+    if [[ "$prev" == "--env" ]]; then
+        local envs
+        envs=$(find secrets -name '*.enc' -maxdepth 1 2>/dev/null | sed 's|secrets/||;s|\.enc$||')
+        COMPREPLY=($(compgen -W "$envs" -- "$cur"))
+        return
+    fi
+
+    # Complete --env= inline
+    if [[ "$cur" == --env=* ]]; then
+        local envs
+        envs=$(find secrets -name '*.enc' -maxdepth 1 2>/dev/null | sed 's|secrets/||;s|\.enc$||')
+        COMPREPLY=($(compgen -P "--env=" -W "$envs" -- "${cur#--env=}"))
+        return
+    fi
+
+    # No subcommand yet — complete subcommands and flags
+    if [[ -z "$subcmd" ]]; then
+        if [[ "$cur" == -* ]]; then
+            COMPREPLY=($(compgen -W "--env --version --help" -- "$cur"))
+        else
+            COMPREPLY=($(compgen -W "$commands" -- "$cur"))
+        fi
+        return
+    fi
+
+    # Subcommand-specific completions
+    case "$subcmd" in
+        get)
+            # Complete keys using hidden __complete-keys command
+            if [[ $cword -eq $((subcmd_idx + 1)) ]]; then
+                local env_arg=""
+                for ((i=1; i < ${#words[@]}; i++)); do
+                    if [[ "${words[i]}" == "--env" && -n "${words[i+1]}" ]]; then
+                        env_arg="--env ${words[i+1]}"
+                        break
+                    fi
+                    if [[ "${words[i]}" == --env=* ]]; then
+                        env_arg="--env ${words[i]#--env=}"
+                        break
+                    fi
+                done
+                local keys
+                keys=$(gosecrets __complete-keys $env_arg 2>/dev/null)
+                COMPREPLY=($(compgen -W "$keys" -- "$cur"))
+            else
+                COMPREPLY=($(compgen -W "--env" -- "$cur"))
+            fi
+            ;;
+        init|edit|show)
+            COMPREPLY=($(compgen -W "--env" -- "$cur"))
+            ;;
+        completion)
+            COMPREPLY=($(compgen -W "bash" -- "$cur"))
+            ;;
+    esac
+}
+
+complete -F _gosecrets gosecrets
+`
 
 func resolveEnv(args *[]string) string {
 	for i, arg := range *args {
