@@ -109,7 +109,7 @@ func cmdInit(env string) error {
 	fmt.Println("  save this key somewhere safe, you need it to decrypt your credentials.")
 	fmt.Println()
 	fmt.Println("next steps:")
-	if env != "" {
+	if env != store.DefaultEnv {
 		fmt.Printf("  gosecrets edit --env %s    # add your secrets\n", env)
 	} else {
 		fmt.Println("  gosecrets edit    # add your secrets")
