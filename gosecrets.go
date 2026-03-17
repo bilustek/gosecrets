@@ -384,6 +384,29 @@ func (s *Secrets) Has(key string) bool {
 	return s.Get(key) != nil
 }
 
+// Keys returns all dot-notation key paths in the credentials.
+func (s *Secrets) Keys() []string {
+	var keys []string
+	collectKeys(s.data, "", &keys)
+
+	return keys
+}
+
+func collectKeys(m map[string]any, prefix string, keys *[]string) {
+	for k, v := range m {
+		full := k
+		if prefix != "" {
+			full = prefix + "." + k
+		}
+
+		if nested, ok := v.(map[string]any); ok {
+			collectKeys(nested, full, keys)
+		} else {
+			*keys = append(*keys, full)
+		}
+	}
+}
+
 // All returns the entire credentials map.
 func (s *Secrets) All() map[string]any {
 	return s.data

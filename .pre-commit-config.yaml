@@ -5,3 +5,4 @@ repos:
       - id: golangci-lint-mod
       - id: go-mod-tidy
       - id: go-test-mod
+        args: [-race, -failfast, -count=1]

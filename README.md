@@ -151,7 +151,14 @@ Library:
 go get -u github.com/bilustek/gosecrets
 ```
 
-CLI Tool:
+CLI Tool via Homebrew:
+
+```bash
+brew tap bilustek/tap
+brew install gosecrets
+```
+
+or via `go install`:
 
 ```bash
 go install github.com/bilustek/gosecrets/cmd/gosecrets@latest
@@ -171,6 +178,7 @@ Usage:
   gosecrets get KEY [--env ENV]    Get a specific value (dot notation)
   gosecrets version, --version, -v Show version
   gosecrets help, --help, -h       Show this help
+  gosecrets completion bash        Output bash completion script
 
 Environment:
   GOSECRETS_ENV                    Environment name (default: development)
@@ -184,6 +192,27 @@ Examples:
   gosecrets edit                   Opens credentials in your editor
   gosecrets get database.password  Prints a specific value
 ```
+
+---
+
+## Bash Completion
+
+Enable tab completion for subcommands, `--env` values, and `get` keys:
+
+```bash
+# add to your ~/.bashrc or ~/.bash_profile
+eval "$(gosecrets completion bash)"
+```
+
+What gets completed:
+
+| Context | Completes |
+|:--------|:----------|
+| `gosecrets [TAB]` | `init`, `edit`, `show`, `get`, `version`, `help`, `completion` |
+| `gosecrets get [TAB]` | credential keys (e.g. `database.host`, `api_key`) |
+| `gosecrets --env [TAB]` | environment names from `secrets/*.enc` files |
+| `gosecrets init --[TAB]` | `--env` |
+| `gosecrets completion [TAB]` | `bash` |
 
 ---
 
@@ -207,6 +236,7 @@ secrets, err := gosecrets.Load()
 | `Map(key, fallback...)` | `map[string]any` | `nil` | Nested map |
 | `TCPAddr(key, fallback...)` | `*net.TCPAddr` | `nil` | Parses `"host:port"` via `net.ResolveTCPAddr` |
 | `Has(key)` | `bool` | `false` | Check if key exists |
+| `Keys()` | `[]string` | `[]` | All dot-notation key paths |
 | `All()` | `map[string]any` | — | Entire credentials map |
 | `MustGet(key)` | `any` | **panic** | Like `Get`, panics if missing |
 | `MustString(key)` | `string` | **panic** | Like `String`, panics if missing |
@@ -248,6 +278,12 @@ addr := secrets.MustTCPAddr("redis_addr")              // panics if not found or
 ---
 
 ## Change Log
+
+**2026-03-17**
+
+- Add bash completion support (`gosecrets completion bash`)
+- Add `Keys()` method for listing all dot-notation key paths
+- Fix `init` next steps hint to include `--env` flag when custom environment is used
 
 **2026-03-01**
 
