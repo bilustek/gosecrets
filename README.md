@@ -151,7 +151,14 @@ Library:
 go get -u github.com/bilustek/gosecrets
 ```
 
-CLI Tool:
+CLI Tool via Homebrew:
+
+```bash
+brew tap bilustek/tap
+brew install gosecrets
+```
+
+or via `go install`:
 
 ```bash
 go install github.com/bilustek/gosecrets/cmd/gosecrets@latest
