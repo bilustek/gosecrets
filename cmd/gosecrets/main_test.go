@@ -458,12 +458,10 @@ func TestCmdCompleteKeysSilentOnError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// cmdCompletion tests (parallel — no filesystem or env mutation)
+// cmdCompletion tests (NOT parallel — captureStdout mutates os.Stdout)
 // ---------------------------------------------------------------------------
 
 func TestCmdCompletionBash(t *testing.T) {
-	t.Parallel()
-
 	out := captureStdout(t, func() {
 		if err := cmdCompletion("bash"); err != nil {
 			t.Fatalf("cmdCompletion(bash) error = %v", err)
@@ -480,8 +478,6 @@ func TestCmdCompletionBash(t *testing.T) {
 }
 
 func TestCmdCompletionUnsupportedShell(t *testing.T) {
-	t.Parallel()
-
 	if err := cmdCompletion("fish"); err == nil {
 		t.Fatal("expected error for unsupported shell, got nil")
 	} else if !strings.Contains(err.Error(), "unsupported shell") {
@@ -490,16 +486,12 @@ func TestCmdCompletionUnsupportedShell(t *testing.T) {
 }
 
 func TestRunCompletion(t *testing.T) {
-	t.Parallel()
-
 	if err := run([]string{"completion", "bash"}); err != nil {
 		t.Fatalf("run(completion bash) error = %v", err)
 	}
 }
 
 func TestRunCompletionNoArgs(t *testing.T) {
-	t.Parallel()
-
 	if err := run([]string{"completion"}); err == nil {
 		t.Fatal("expected error for completion without shell arg, got nil")
 	}
