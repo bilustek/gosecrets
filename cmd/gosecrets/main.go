@@ -11,7 +11,7 @@ import (
 	"github.com/bilustek/gosecrets/internal/store"
 )
 
-const version = "0.3.0"
+const version = "0.3.1"
 
 const usage = `gosecrets - encrypted credentials for Go projects
 
