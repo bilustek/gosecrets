@@ -725,3 +725,106 @@ func TestRunGetWithRootFlag(t *testing.T) {
 		t.Fatalf("run(get --root) error = %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// error path coverage tests (NOT parallel — uses t.Setenv)
+// ---------------------------------------------------------------------------
+
+func TestNewStoreErrorOnEmptyEnv(t *testing.T) {
+	t.Parallel()
+
+	if _, err := newStore("", ""); err == nil {
+		t.Fatal("expected error for empty env, got nil")
+	}
+}
+
+func TestCmdInitErrorOnEmptyEnv(t *testing.T) {
+	t.Parallel()
+
+	if err := cmdInit("", ""); err == nil {
+		t.Fatal("expected error for empty env, got nil")
+	}
+}
+
+func TestCmdShowErrorOnBadKey(t *testing.T) {
+	dir := t.TempDir()
+	chdirTemp(t, dir)
+
+	// init a store, then corrupt the master key env
+	setupStore(t, dir, store.DefaultEnv, []byte("key: value\n"))
+	t.Setenv(store.EnvMasterKey, "wrongkey")
+
+	if err := cmdShow(store.DefaultEnv, ""); err == nil {
+		t.Fatal("expected error for bad master key, got nil")
+	}
+}
+
+func TestCmdGetErrorOnBadKey(t *testing.T) {
+	dir := t.TempDir()
+	chdirTemp(t, dir)
+
+	setupStore(t, dir, store.DefaultEnv, []byte("key: value\n"))
+	t.Setenv(store.EnvMasterKey, "wrongkey")
+
+	if err := cmdGet("key", store.DefaultEnv, ""); err == nil {
+		t.Fatal("expected error for bad master key, got nil")
+	}
+}
+
+func TestCmdInitErrorOnNewStoreFailure(t *testing.T) {
+	t.Parallel()
+
+	if err := cmdInit("", "/some/path"); err == nil {
+		t.Fatal("expected error for empty env in cmdInit, got nil")
+	}
+}
+
+func TestCmdEditErrorOnNewStoreFailure(t *testing.T) {
+	t.Parallel()
+
+	if err := cmdEdit("", "/some/path"); err == nil {
+		t.Fatal("expected error for empty env in cmdEdit, got nil")
+	}
+}
+
+func TestCmdEditErrorOnMissingStore(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Setenv(store.EnvMasterKey, "")
+
+	if err := cmdEdit(store.DefaultEnv, dir); err == nil {
+		t.Fatal("expected error for missing store in cmdEdit, got nil")
+	}
+}
+
+func TestCmdGetVerifyOutput(t *testing.T) {
+	dir := t.TempDir()
+	chdirTemp(t, dir)
+	setupStore(t, dir, store.DefaultEnv, []byte("api_key: hello-world\n"))
+
+	out := captureStdout(t, func() {
+		if err := cmdGet("api_key", store.DefaultEnv, ""); err != nil {
+			t.Fatalf("cmdGet error = %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "hello-world") {
+		t.Fatalf("expected output to contain %q, got: %s", "hello-world", out)
+	}
+}
+
+func TestCmdShowVerifyOutput(t *testing.T) {
+	dir := t.TempDir()
+	chdirTemp(t, dir)
+	setupStore(t, dir, store.DefaultEnv, []byte("secret: show-me\n"))
+
+	out := captureStdout(t, func() {
+		if err := cmdShow(store.DefaultEnv, ""); err != nil {
+			t.Fatalf("cmdShow error = %v", err)
+		}
+	})
+
+	if !strings.Contains(out, "secret: show-me") {
+		t.Fatalf("expected output to contain %q, got: %s", "secret: show-me", out)
+	}
+}
