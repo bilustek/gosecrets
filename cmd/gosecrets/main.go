@@ -257,7 +257,26 @@ func cmdCompletion(shell string) error {
 	}
 }
 
-const bashCompletionScript = `_gosecrets() {
+const bashCompletionScript = `_gosecrets_find_root() {
+    local i
+    for ((i=1; i < ${#words[@]}; i++)); do
+        if [[ "${words[i]}" == "--root" && -n "${words[i+1]}" ]]; then
+            echo "${words[i+1]}"
+            return
+        fi
+        if [[ "${words[i]}" == --root=* ]]; then
+            echo "${words[i]#--root=}"
+            return
+        fi
+    done
+    if [[ -n "${GOSECRETS_ROOT:-}" ]]; then
+        echo "$GOSECRETS_ROOT"
+        return
+    fi
+    echo "."
+}
+
+_gosecrets() {
     local cur prev words cword
     _init_completion || return
 
@@ -285,10 +304,14 @@ const bashCompletionScript = `_gosecrets() {
         esac
     done
 
+    # Resolve secrets directory from --root flag or GOSECRETS_ROOT env var
+    local secrets_dir
+    secrets_dir="$(_gosecrets_find_root)/secrets"
+
     # Complete --env value
     if [[ "$prev" == "--env" ]]; then
         local envs
-        envs=$(find secrets -name '*.enc' -maxdepth 1 2>/dev/null | sed 's|secrets/||;s|\.enc$||')
+        envs=$(find "$secrets_dir" -name '*.enc' -maxdepth 1 2>/dev/null | sed "s|$secrets_dir/||;s|\.enc$||")
         COMPREPLY=($(compgen -W "$envs" -- "$cur"))
         return
     fi
@@ -296,7 +319,7 @@ const bashCompletionScript = `_gosecrets() {
     # Complete --env= inline
     if [[ "$cur" == --env=* ]]; then
         local envs
-        envs=$(find secrets -name '*.enc' -maxdepth 1 2>/dev/null | sed 's|secrets/||;s|\.enc$||')
+        envs=$(find "$secrets_dir" -name '*.enc' -maxdepth 1 2>/dev/null | sed "s|$secrets_dir/||;s|\.enc$||")
         COMPREPLY=($(compgen -P "--env=" -W "$envs" -- "${cur#--env=}"))
         return
     fi
