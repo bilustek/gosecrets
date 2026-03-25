@@ -511,14 +511,18 @@ func TestRunCompleteKeys(t *testing.T) {
 // resolveRoot tests
 // ---------------------------------------------------------------------------
 
-func TestResolveRootWithFlag(t *testing.T) {
+func TestResolveRootWithRelativeFlag(t *testing.T) {
 	t.Parallel()
 
-	args := []string{"init", "--root", "/app"}
-	root := resolveRoot(&args)
+	args := []string{"init", "--root", "./config"}
+	root, err := resolveRoot(&args)
 
-	if root != "/app" {
-		t.Fatalf("expected root %q, got %q", "/app", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if root != "./config" {
+		t.Fatalf("expected root %q, got %q", "./config", root)
 	}
 
 	if len(args) != 1 || args[0] != "init" {
@@ -526,18 +530,44 @@ func TestResolveRootWithFlag(t *testing.T) {
 	}
 }
 
-func TestResolveRootWithEquals(t *testing.T) {
+func TestResolveRootWithRelativeEquals(t *testing.T) {
 	t.Parallel()
 
-	args := []string{"init", "--root=/opt/myapp"}
-	root := resolveRoot(&args)
+	args := []string{"init", "--root=subdir"}
+	root, err := resolveRoot(&args)
 
-	if root != "/opt/myapp" {
-		t.Fatalf("expected root %q, got %q", "/opt/myapp", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if root != "subdir" {
+		t.Fatalf("expected root %q, got %q", "subdir", root)
 	}
 
 	if len(args) != 1 || args[0] != "init" {
 		t.Fatalf("expected args [init], got %v", args)
+	}
+}
+
+func TestResolveRootRejectsAbsoluteFlag(t *testing.T) {
+	t.Parallel()
+
+	args := []string{"init", "--root", "/app"}
+	_, err := resolveRoot(&args)
+
+	if !errors.Is(err, errAbsoluteRoot) {
+		t.Fatalf("expected errAbsoluteRoot, got: %v", err)
+	}
+}
+
+func TestResolveRootRejectsAbsoluteEquals(t *testing.T) {
+	t.Parallel()
+
+	args := []string{"init", "--root=/opt/myapp"}
+	_, err := resolveRoot(&args)
+
+	if !errors.Is(err, errAbsoluteRoot) {
+		t.Fatalf("expected errAbsoluteRoot, got: %v", err)
 	}
 }
 
@@ -546,7 +576,11 @@ func TestResolveRootWithoutFlag(t *testing.T) {
 
 	t.Setenv(store.EnvRoot, "")
 
-	root := resolveRoot(&args)
+	root, err := resolveRoot(&args)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if root != "" {
 		t.Fatalf("expected empty root, got %q", root)
@@ -557,12 +591,16 @@ func TestResolveRootWithoutFlag(t *testing.T) {
 	}
 }
 
-func TestResolveRootFromEnvVar(t *testing.T) {
+func TestResolveRootFromEnvVarAbsolute(t *testing.T) {
 	args := []string{"init"}
 
 	t.Setenv(store.EnvRoot, "/from/env")
 
-	root := resolveRoot(&args)
+	root, err := resolveRoot(&args)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if root != "/from/env" {
 		t.Fatalf("expected root %q, got %q", "/from/env", root)
@@ -574,29 +612,45 @@ func TestResolveRootFromEnvVar(t *testing.T) {
 }
 
 func TestResolveRootFlagOverridesEnvVar(t *testing.T) {
-	args := []string{"init", "--root", "/from/flag"}
+	args := []string{"init", "--root", "from-flag"}
 
 	t.Setenv(store.EnvRoot, "/from/env")
 
-	root := resolveRoot(&args)
+	root, err := resolveRoot(&args)
 
-	if root != "/from/flag" {
-		t.Fatalf("expected root %q, got %q", "/from/flag", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if root != "from-flag" {
+		t.Fatalf("expected root %q, got %q", "from-flag", root)
 	}
 }
 
 func TestResolveRootAtBeginning(t *testing.T) {
 	t.Parallel()
 
-	args := []string{"--root", "/app", "show"}
-	root := resolveRoot(&args)
+	args := []string{"--root", "config", "show"}
+	root, err := resolveRoot(&args)
 
-	if root != "/app" {
-		t.Fatalf("expected root %q, got %q", "/app", root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if root != "config" {
+		t.Fatalf("expected root %q, got %q", "config", root)
 	}
 
 	if len(args) != 1 || args[0] != "show" {
 		t.Fatalf("expected args [show], got %v", args)
+	}
+}
+
+func TestRunRejectsAbsoluteRootFlag(t *testing.T) {
+	t.Parallel()
+
+	if err := run([]string{"init", "--root", "/absolute/path"}); !errors.Is(err, errAbsoluteRoot) {
+		t.Fatalf("expected errAbsoluteRoot, got: %v", err)
 	}
 }
 
@@ -656,40 +710,43 @@ func TestCmdGetWithRoot(t *testing.T) {
 
 func TestRunInitWithRootFlag(t *testing.T) {
 	dir := t.TempDir()
+	chdirTemp(t, dir)
 
-	if err := run([]string{"init", "--root", dir}); err != nil {
+	if err := run([]string{"init", "--root", "myroot"}); err != nil {
 		t.Fatalf("run(init --root) error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "secrets", "development.key")); err != nil {
+	if _, err := os.Stat(filepath.Join("myroot", "secrets", "development.key")); err != nil {
 		t.Fatalf("development.key should exist at root: %v", err)
 	}
 }
 
 func TestRunInitWithRootEqualsFlag(t *testing.T) {
 	dir := t.TempDir()
+	chdirTemp(t, dir)
 
-	if err := run([]string{"init", "--root=" + dir}); err != nil {
+	if err := run([]string{"init", "--root=myroot"}); err != nil {
 		t.Fatalf("run(init --root=dir) error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "secrets", "development.key")); err != nil {
+	if _, err := os.Stat(filepath.Join("myroot", "secrets", "development.key")); err != nil {
 		t.Fatalf("development.key should exist at root: %v", err)
 	}
 }
 
 func TestRunInitWithRootAndEnvFlags(t *testing.T) {
 	dir := t.TempDir()
+	chdirTemp(t, dir)
 
-	if err := run([]string{"init", "--root", dir, "--env", "staging"}); err != nil {
+	if err := run([]string{"init", "--root", "myroot", "--env", "staging"}); err != nil {
 		t.Fatalf("run(init --root --env) error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "secrets", "staging.key")); err != nil {
+	if _, err := os.Stat(filepath.Join("myroot", "secrets", "staging.key")); err != nil {
 		t.Fatalf("staging.key should exist at root: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, "secrets", "staging.enc")); err != nil {
+	if _, err := os.Stat(filepath.Join("myroot", "secrets", "staging.enc")); err != nil {
 		t.Fatalf("staging.enc should exist at root: %v", err)
 	}
 }
@@ -710,19 +767,35 @@ func TestRunInitWithRootEnvVar(t *testing.T) {
 
 func TestRunShowWithRootFlag(t *testing.T) {
 	dir := t.TempDir()
+	chdirTemp(t, dir)
+
 	setupStore(t, dir, store.DefaultEnv, []byte("api_key: test\n"))
 
-	if err := run([]string{"show", "--root", dir}); err != nil {
-		t.Fatalf("run(show --root) error = %v", err)
+	// secrets are at absolute dir, but we use relative "." since we chdir'd there
+	if err := run([]string{"show"}); err != nil {
+		t.Fatalf("run(show) error = %v", err)
 	}
 }
 
-func TestRunGetWithRootFlag(t *testing.T) {
+func TestRunShowWithRootEnvVar(t *testing.T) {
+	dir := t.TempDir()
+	setupStore(t, dir, store.DefaultEnv, []byte("api_key: test\n"))
+
+	t.Setenv(store.EnvRoot, dir)
+
+	if err := run([]string{"show"}); err != nil {
+		t.Fatalf("run(show) with GOSECRETS_ROOT error = %v", err)
+	}
+}
+
+func TestRunGetWithRootEnvVar(t *testing.T) {
 	dir := t.TempDir()
 	setupStore(t, dir, store.DefaultEnv, []byte("api_key: root-test\n"))
 
-	if err := run([]string{"get", "api_key", "--root", dir}); err != nil {
-		t.Fatalf("run(get --root) error = %v", err)
+	t.Setenv(store.EnvRoot, dir)
+
+	if err := run([]string{"get", "api_key"}); err != nil {
+		t.Fatalf("run(get) with GOSECRETS_ROOT error = %v", err)
 	}
 }
 

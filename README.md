@@ -108,44 +108,66 @@ By default, `gosecrets` creates and looks for the `secrets/` directory **in the
 current working directory**. If your project layout requires a different
 location, use the `--root` flag or the `GOSECRETS_ROOT` environment variable.
 
-### CLI usage
+> **Important:** The `--root` flag only accepts **relative paths** to keep
+> secrets within the project. For absolute paths (CI/CD, Docker), use the
+> `GOSECRETS_ROOT` environment variable.
+
+### CLI usage (relative paths only)
 
 ```bash
-# create secrets under /app instead of current directory
-gosecrets init --root /app --env production
-# → /app/secrets/production.key
-# → /app/secrets/production.enc
+# create secrets under ./deploy instead of current directory
+gosecrets init --root ./deploy --env production
+# → ./deploy/secrets/production.key
+# → ./deploy/secrets/production.enc
 
 # edit, show, get all support --root
-gosecrets edit --root /app --env production
-gosecrets show --root /app --env production
-gosecrets get database.password --root /app --env production
+gosecrets edit --root ./deploy --env production
+gosecrets show --root ./deploy --env production
+gosecrets get database.password --root ./deploy --env production
 
 # --root=<path> syntax also works
-gosecrets init --root=/opt/myapp
+gosecrets init --root=config
+
+# absolute paths are rejected by the CLI flag:
+gosecrets init --root /app   # ✘ error: use GOSECRETS_ROOT for absolute paths
 ```
 
-### Environment variable
+### Environment variable (for CI/CD and Docker)
 
-Instead of passing `--root` every time, set `GOSECRETS_ROOT`:
+In CI/CD pipelines and Docker containers, the project root is often an absolute
+path like `/app`. Use `GOSECRETS_ROOT` for these cases:
 
 ```bash
+# Docker / CI — set absolute path via env var
 export GOSECRETS_ROOT=/app
 gosecrets init --env production   # uses /app/secrets/
 gosecrets edit --env production   # uses /app/secrets/
+```
+
+```dockerfile
+# Dockerfile example
+ENV GOSECRETS_ROOT=/app
+ENV GOSECRETS_ENV=production
+ENV GOSECRETS_PRODUCTION_KEY=your-master-key-here
 ```
 
 The `--root` flag always takes precedence over `GOSECRETS_ROOT`.
 
 ### Library usage
 
-When using `gosecrets` as a Go library, pass `WithRoot()`:
+When using `gosecrets` as a Go library, `WithRoot()` accepts both relative
+and absolute paths — no restriction:
 
 ```go
-// load from /app/secrets/production.enc
+// load from /app/secrets/production.enc (absolute — common in Docker)
 secrets, err := gosecrets.Load(
     gosecrets.WithRoot("/app"),
     gosecrets.WithEnv("production"),
+)
+
+// load from ./deploy/secrets/development.enc (relative)
+secrets, err := gosecrets.Load(
+    gosecrets.WithRoot("./deploy"),
 )
 ```
 
@@ -154,21 +176,23 @@ working directory — same as the CLI.
 
 ### Resolution order
 
-| Priority | Source | Example |
-|:---------|:-------|:--------|
-| 1 (highest) | `--root` flag | `--root /app` |
-| 2 | `GOSECRETS_ROOT` env var | `export GOSECRETS_ROOT=/app` |
-| 3 (default) | Current working directory | `./secrets/` |
+| Priority | Source | Accepts | Example |
+|:---------|:-------|:--------|:--------|
+| 1 (highest) | `--root` flag | relative only | `--root ./deploy` |
+| 2 | `GOSECRETS_ROOT` env var | relative or absolute | `export GOSECRETS_ROOT=/app` |
+| 3 (default) | Current working directory | — | `./secrets/` |
 
 ### Directory layout with custom root
 
 ```
-/app/                         ← --root /app
-├── secrets/
-│   ├── development.enc       ← encrypted YAML (committed)
-│   ├── development.key       ← decryption key (.gitignore!)
-│   ├── production.enc
-│   └── production.key
+your-project/
+├── deploy/                       ← --root ./deploy
+│   └── secrets/
+│       ├── production.enc        ← encrypted YAML (committed)
+│       └── production.key        ← decryption key (.gitignore!)
+├── secrets/                      ← default (no --root)
+│   ├── development.enc
+│   └── development.key
 ├── main.go
 └── ...
 ```
@@ -261,11 +285,11 @@ Environment:
   EDITOR / VISUAL                  Preferred text editor
 
 Examples:
-  gosecrets init                              Creates ./secrets/development.{key,enc}
-  gosecrets init --env production             Creates ./secrets/production.{key,enc}
-  gosecrets init --root /app --env production Creates /app/secrets/production.{key,enc}
-  gosecrets edit                              Opens credentials in your editor
-  gosecrets get database.password             Prints a specific value
+  gosecrets init                                  Creates ./secrets/development.{key,enc}
+  gosecrets init --env production                 Creates ./secrets/production.{key,enc}
+  gosecrets init --root ./deploy --env production Creates ./deploy/secrets/production.{key,enc}
+  gosecrets edit                                  Opens credentials in your editor
+  gosecrets get database.password                 Prints a specific value
 ```
 
 ---
@@ -311,7 +335,13 @@ secrets, err := gosecrets.Load()
 // defaults: ./secrets/development.enc
 secrets, err := gosecrets.Load()
 
-// custom root + env: /app/secrets/production.enc
+// custom root + env: ./deploy/secrets/production.enc
+secrets, err := gosecrets.Load(
+    gosecrets.WithRoot("./deploy"),
+    gosecrets.WithEnv("production"),
+)
+
+// Docker/CI absolute path: /app/secrets/production.enc
 secrets, err := gosecrets.Load(
     gosecrets.WithRoot("/app"),
     gosecrets.WithEnv("production"),
@@ -377,8 +407,9 @@ addr := secrets.MustTCPAddr("redis_addr")              // panics if not found or
 
 **2026-03-25**
 
-- Add `--root` flag to all CLI commands (`init`, `edit`, `show`, `get`)
-- Add `GOSECRETS_ROOT` environment variable for setting root directory
+- Add `--root` flag to all CLI commands (`init`, `edit`, `show`, `get`) — relative paths only
+- Add `GOSECRETS_ROOT` environment variable for absolute paths (CI/CD, Docker)
+- CLI rejects absolute paths in `--root` flag with a clear error message
 - Bash completion now supports `--root` with directory completion
 - Update documentation with custom root directory examples
 

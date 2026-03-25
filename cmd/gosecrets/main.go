@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/bilustek/gosecrets"
@@ -32,11 +33,11 @@ Environment:
   EDITOR / VISUAL                  Preferred text editor
 
 Examples:
-  gosecrets init                              Creates ./secrets/development.{key,enc}
-  gosecrets init --env production             Creates ./secrets/production.{key,enc}
-  gosecrets init --root /app --env production Creates /app/secrets/production.{key,enc}
-  gosecrets edit                              Opens credentials in your editor
-  gosecrets get database.password             Prints a specific value
+  gosecrets init                                  Creates ./secrets/development.{key,enc}
+  gosecrets init --env production                 Creates ./secrets/production.{key,enc}
+  gosecrets init --root ./deploy --env production Creates ./deploy/secrets/production.{key,enc}
+  gosecrets edit                                  Opens credentials in your editor
+  gosecrets get database.password                 Prints a specific value
 `
 
 var errUnknownCommand = errors.New("unknown command")
@@ -56,7 +57,11 @@ func run(args []string) error {
 	}
 
 	env := resolveEnv(&args)
-	root := resolveRoot(&args)
+
+	root, err := resolveRoot(&args)
+	if err != nil {
+		return err
+	}
 
 	if len(args) == 0 {
 		fmt.Print(usage)
@@ -382,26 +387,36 @@ func resolveEnv(args *[]string) string {
 	return store.DefaultEnv
 }
 
-func resolveRoot(args *[]string) string {
+var errAbsoluteRoot = errors.New("--root must be a relative path (use GOSECRETS_ROOT env var for absolute paths)")
+
+func resolveRoot(args *[]string) (string, error) {
 	for i, arg := range *args {
 		if arg == "--root" && i+1 < len(*args) {
 			root := (*args)[i+1]
 			*args = append((*args)[:i], (*args)[i+2:]...)
 
-			return root
+			if filepath.IsAbs(root) {
+				return "", errAbsoluteRoot
+			}
+
+			return root, nil
 		}
 
 		if strings.HasPrefix(arg, "--root=") {
 			root := strings.TrimPrefix(arg, "--root=")
 			*args = append((*args)[:i], (*args)[i+1:]...)
 
-			return root
+			if filepath.IsAbs(root) {
+				return "", errAbsoluteRoot
+			}
+
+			return root, nil
 		}
 	}
 
 	if root := os.Getenv(store.EnvRoot); root != "" {
-		return root
+		return root, nil
 	}
 
-	return ""
+	return "", nil
 }
