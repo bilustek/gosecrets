@@ -102,6 +102,106 @@ secrets, err := gosecrets.Load()   // picks up GOSECRETS_ENV=foo automatically
 
 ---
 
+## Custom Root Directory (`--root`)
+
+By default, `gosecrets` creates and looks for the `secrets/` directory **in the
+current working directory**. If your project layout requires a different
+location, use the `--root` flag or the `GOSECRETS_ROOT` environment variable.
+
+> **Important:** The `--root` flag only accepts **relative paths within the
+> project directory**. Absolute paths and `..` traversal are rejected. For
+> paths outside the project (CI/CD, Docker), use the `GOSECRETS_ROOT`
+> environment variable.
+
+### CLI usage (relative paths only)
+
+```bash
+# create secrets under ./deploy instead of current directory
+gosecrets init --root ./deploy --env production
+# → ./deploy/secrets/production.key
+# → ./deploy/secrets/production.enc
+
+# edit, show, get all support --root
+gosecrets edit --root ./deploy --env production
+gosecrets show --root ./deploy --env production
+gosecrets get database.password --root ./deploy --env production
+
+# --root=<path> syntax also works
+gosecrets init --root=config
+
+# these are rejected by the CLI:
+gosecrets init --root /app         # ✘ absolute path
+gosecrets init --root ../outside   # ✘ escapes project directory
+gosecrets init --root=             # ✘ empty value
+```
+
+### Environment variable (for CI/CD and Docker)
+
+In CI/CD pipelines and Docker containers, the project root is often an absolute
+path like `/app`. Use `GOSECRETS_ROOT` for these cases:
+
+```bash
+# Docker / CI — set absolute path via env var
+export GOSECRETS_ROOT=/app
+gosecrets init --env production   # uses /app/secrets/
+gosecrets edit --env production   # uses /app/secrets/
+```
+
+```dockerfile
+# Dockerfile example
+ENV GOSECRETS_ROOT=/app
+ENV GOSECRETS_ENV=production
+ENV GOSECRETS_PRODUCTION_KEY=your-master-key-here
+```
+
+The `--root` flag always takes precedence over `GOSECRETS_ROOT`.
+
+### Library usage
+
+When using `gosecrets` as a Go library, `WithRoot()` accepts both relative
+and absolute paths — no restriction:
+
+```go
+// load from /app/secrets/production.enc (absolute — common in Docker)
+secrets, err := gosecrets.Load(
+    gosecrets.WithRoot("/app"),
+    gosecrets.WithEnv("production"),
+)
+
+// load from ./deploy/secrets/development.enc (relative)
+secrets, err := gosecrets.Load(
+    gosecrets.WithRoot("./deploy"),
+)
+```
+
+Without `WithRoot()`, the library reads from `./secrets/` relative to the
+working directory — same as the CLI.
+
+### Resolution order
+
+| Priority | Source | Accepts | Example |
+|:---------|:-------|:--------|:--------|
+| 1 (highest) | `--root` flag | relative only | `--root ./deploy` |
+| 2 | `GOSECRETS_ROOT` env var | relative or absolute | `export GOSECRETS_ROOT=/app` |
+| 3 (default) | Current working directory | — | `./secrets/` |
+
+### Directory layout with custom root
+
+```
+your-project/
+├── deploy/                       ← --root ./deploy
+│   └── secrets/
+│       ├── production.enc        ← encrypted YAML (committed)
+│       └── production.key        ← decryption key (.gitignore!)
+├── secrets/                      ← default (no --root)
+│   ├── development.enc
+│   └── development.key
+├── main.go
+└── ...
+```
+
+---
+
 ## How It Works ?
 
 `gosecrets` stores your secrets **encrypted inside your repository**. Only
@@ -135,7 +235,7 @@ different **ciphertext** every time.
     │ You edit │────▶│ gosecrets    │────▶│ <env>.enc       │
     │ YAML     │     │ encrypts     │     │ (committed)     │
     └──────────┘     └──────────────┘     └─────────────────┘
-    
+
     ┌──────────┐     ┌──────────────┐     ┌─────────────────┐
     │ Your app │◀────│ gosecrets    │◀────│ <env>.enc       │
     │ reads    │     │ decrypts     │     │ + master key    │
@@ -172,32 +272,34 @@ $ gosecrets
 gosecrets - encrypted credentials for Go projects
 
 Usage:
-  gosecrets init [--env ENV]       Initialize a new credential store
-  gosecrets edit [--env ENV]       Edit credentials in $EDITOR
-  gosecrets show [--env ENV]       Print decrypted credentials to stdout
-  gosecrets get KEY [--env ENV]    Get a specific value (dot notation)
-  gosecrets version, --version, -v Show version
-  gosecrets help, --help, -h       Show this help
-  gosecrets completion bash        Output bash completion script
+  gosecrets init [--env ENV] [--root DIR]       Initialize a new credential store
+  gosecrets edit [--env ENV] [--root DIR]       Edit credentials in $EDITOR
+  gosecrets show [--env ENV] [--root DIR]       Print decrypted credentials to stdout
+  gosecrets get KEY [--env ENV] [--root DIR]    Get a specific value (dot notation)
+  gosecrets version, --version, -v              Show version
+  gosecrets help, --help, -h                    Show this help
+  gosecrets completion bash                     Output bash completion script
 
 Environment:
+  GOSECRETS_ROOT                   Root directory for secrets/ (default: current directory)
   GOSECRETS_ENV                    Environment name (default: development)
   GOSECRETS_MASTER_KEY             Master key (overrides all key files)
   GOSECRETS_<ENV>_KEY              Environment-specific key (e.g. GOSECRETS_PRODUCTION_KEY)
   EDITOR / VISUAL                  Preferred text editor
 
 Examples:
-  gosecrets init                   Creates secrets/development.key + secrets/development.enc
-  gosecrets init --env production  Creates secrets/production.key + secrets/production.enc
-  gosecrets edit                   Opens credentials in your editor
-  gosecrets get database.password  Prints a specific value
+  gosecrets init                                  Creates ./secrets/development.{key,enc}
+  gosecrets init --env production                 Creates ./secrets/production.{key,enc}
+  gosecrets init --root ./deploy --env production Creates ./deploy/secrets/production.{key,enc}
+  gosecrets edit                                  Opens credentials in your editor
+  gosecrets get database.password                 Prints a specific value
 ```
 
 ---
 
 ## Bash Completion
 
-Enable tab completion for subcommands, `--env` values, and `get` keys:
+Enable tab completion for subcommands, `--env` values, `--root` directories, and `get` keys:
 
 ```bash
 # add to your ~/.bashrc or ~/.bash_profile
@@ -211,7 +313,8 @@ What gets completed:
 | `gosecrets [TAB]` | `init`, `edit`, `show`, `get`, `version`, `help`, `completion` |
 | `gosecrets get [TAB]` | credential keys (e.g. `database.host`, `api_key`) |
 | `gosecrets --env [TAB]` | environment names from `secrets/*.enc` files |
-| `gosecrets init --[TAB]` | `--env` |
+| `gosecrets --root [TAB]` | directory names (filesystem completion) |
+| `gosecrets init --[TAB]` | `--env`, `--root` |
 | `gosecrets completion [TAB]` | `bash` |
 
 ---
@@ -223,6 +326,32 @@ All accessors support **dot notation** for nested keys (e.g. `"database.password
 ```go
 secrets, err := gosecrets.Load()
 ```
+
+### Load Options
+
+| Option | Description | Example |
+|:-------|:-----------|:--------|
+| `gosecrets.WithRoot(dir)` | Set root directory for `secrets/` | `gosecrets.WithRoot("/app")` |
+| `gosecrets.WithEnv(env)` | Set environment name | `gosecrets.WithEnv("production")` |
+
+```go
+// defaults: ./secrets/development.enc
+secrets, err := gosecrets.Load()
+
+// custom root + env: ./deploy/secrets/production.enc
+secrets, err := gosecrets.Load(
+    gosecrets.WithRoot("./deploy"),
+    gosecrets.WithEnv("production"),
+)
+
+// Docker/CI absolute path: /app/secrets/production.enc
+secrets, err := gosecrets.Load(
+    gosecrets.WithRoot("/app"),
+    gosecrets.WithEnv("production"),
+)
+```
+
+### Accessors
 
 | Method | Return | Zero value | Description |
 |:-------|:-------|:-----------|:------------|
@@ -279,6 +408,14 @@ addr := secrets.MustTCPAddr("redis_addr")              // panics if not found or
 
 ## Change Log
 
+**2026-03-25**
+
+- Add `--root` flag to all CLI commands (`init`, `edit`, `show`, `get`) — relative paths only
+- Add `GOSECRETS_ROOT` environment variable for absolute paths (CI/CD, Docker)
+- CLI rejects absolute paths in `--root` flag with a clear error message
+- Bash completion now supports `--root` with directory completion
+- Update documentation with custom root directory examples
+
 **2026-03-17**
 
 - Add bash completion support (`gosecrets completion bash`)
@@ -307,7 +444,7 @@ addr := secrets.MustTCPAddr("redis_addr")              // panics if not found or
 
 ## Contribute
 
-All PR’s are welcome!
+All PR's are welcome!
 
 1. `fork` (https://github.com/bilustek/gosecrets/fork)
 1. Create your `branch` (`git checkout -b my-feature`)

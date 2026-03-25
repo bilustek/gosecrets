@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/bilustek/gosecrets"
@@ -16,25 +17,27 @@ const version = "0.3.1"
 const usage = `gosecrets - encrypted credentials for Go projects
 
 Usage:
-  gosecrets init [--env ENV]       Initialize a new credential store
-  gosecrets edit [--env ENV]       Edit credentials in $EDITOR
-  gosecrets show [--env ENV]       Print decrypted credentials to stdout
-  gosecrets get KEY [--env ENV]    Get a specific value (dot notation)
-  gosecrets version, --version, -v Show version
-  gosecrets help, --help, -h       Show this help
-  gosecrets completion bash        Output bash completion script
+  gosecrets init [--env ENV] [--root DIR]       Initialize a new credential store
+  gosecrets edit [--env ENV] [--root DIR]       Edit credentials in $EDITOR
+  gosecrets show [--env ENV] [--root DIR]       Print decrypted credentials to stdout
+  gosecrets get KEY [--env ENV] [--root DIR]    Get a specific value (dot notation)
+  gosecrets version, --version, -v              Show version
+  gosecrets help, --help, -h                    Show this help
+  gosecrets completion bash                     Output bash completion script
 
 Environment:
+  GOSECRETS_ROOT                   Root directory for secrets/ (default: current directory)
   GOSECRETS_ENV                    Environment name (default: development)
   GOSECRETS_MASTER_KEY             Master key (overrides all key files)
   GOSECRETS_<ENV>_KEY              Environment-specific key (e.g. GOSECRETS_PRODUCTION_KEY)
   EDITOR / VISUAL                  Preferred text editor
 
 Examples:
-  gosecrets init                   Creates secrets/development.key + secrets/development.enc
-  gosecrets init --env production  Creates secrets/production.key + secrets/production.enc
-  gosecrets edit                   Opens credentials in your editor
-  gosecrets get database.password  Prints a specific value
+  gosecrets init                                  Creates ./secrets/development.{key,enc}
+  gosecrets init --env production                 Creates ./secrets/production.{key,enc}
+  gosecrets init --root ./deploy --env production Creates ./deploy/secrets/production.{key,enc}
+  gosecrets edit                                  Opens credentials in your editor
+  gosecrets get database.password                 Prints a specific value
 `
 
 var errUnknownCommand = errors.New("unknown command")
@@ -55,6 +58,11 @@ func run(args []string) error {
 
 	env := resolveEnv(&args)
 
+	root, err := resolveRoot(&args)
+	if err != nil {
+		return err
+	}
+
 	if len(args) == 0 {
 		fmt.Print(usage)
 
@@ -63,17 +71,17 @@ func run(args []string) error {
 
 	switch args[0] {
 	case "init":
-		return cmdInit(env)
+		return cmdInit(env, root)
 	case "edit":
-		return cmdEdit(env)
+		return cmdEdit(env, root)
 	case "show":
-		return cmdShow(env)
+		return cmdShow(env, root)
 	case "get":
 		if len(args) < 2 {
-			return errors.New("usage: gosecrets get KEY [--env ENV]")
+			return errors.New("usage: gosecrets get KEY [--env ENV] [--root DIR]")
 		}
 
-		return cmdGet(args[1], env)
+		return cmdGet(args[1], env, root)
 	case "version", "--version", "-v":
 		fmt.Println(version)
 
@@ -85,7 +93,7 @@ func run(args []string) error {
 
 		return cmdCompletion(args[1])
 	case "__complete-keys":
-		return cmdCompleteKeys(env)
+		return cmdCompleteKeys(env, root)
 	case "help", "--help", "-h":
 		fmt.Print(usage)
 
@@ -95,8 +103,8 @@ func run(args []string) error {
 	}
 }
 
-func cmdInit(env string) error {
-	s, err := newStore(env)
+func cmdInit(env, root string) error {
+	s, err := newStore(env, root)
 	if err != nil {
 		return err
 	}
@@ -127,8 +135,8 @@ func cmdInit(env string) error {
 	return nil
 }
 
-func cmdEdit(env string) error {
-	s, err := newStore(env)
+func cmdEdit(env, root string) error {
+	s, err := newStore(env, root)
 	if err != nil {
 		return err
 	}
@@ -162,8 +170,8 @@ func cmdEdit(env string) error {
 	return nil
 }
 
-func cmdShow(env string) error {
-	s, err := newStore(env)
+func cmdShow(env, root string) error {
+	s, err := newStore(env, root)
 	if err != nil {
 		return err
 	}
@@ -183,8 +191,8 @@ func cmdShow(env string) error {
 	return nil
 }
 
-func cmdGet(key, env string) error {
-	secrets, err := gosecrets.Load(buildLoadOpts(env)...)
+func cmdGet(key, env, root string) error {
+	secrets, err := gosecrets.Load(buildLoadOpts(env, root)...)
 	if err != nil {
 		return fmt.Errorf("get: %w", err)
 	}
@@ -198,8 +206,8 @@ func cmdGet(key, env string) error {
 	return nil
 }
 
-func newStore(env string) (*store.Store, error) {
-	s, err := store.New(buildStoreOpts(env)...)
+func newStore(env, root string) (*store.Store, error) {
+	s, err := store.New(buildStoreOpts(env, root)...)
 	if err != nil {
 		return nil, fmt.Errorf("create store: %w", err)
 	}
@@ -207,16 +215,26 @@ func newStore(env string) (*store.Store, error) {
 	return s, nil
 }
 
-func buildStoreOpts(env string) []store.Option {
-	return []store.Option{store.WithEnv(env)}
+func buildStoreOpts(env, root string) []store.Option {
+	opts := []store.Option{store.WithEnv(env)}
+	if root != "" {
+		opts = append(opts, store.WithRoot(root))
+	}
+
+	return opts
 }
 
-func buildLoadOpts(env string) []gosecrets.Option {
-	return []gosecrets.Option{gosecrets.WithEnv(env)}
+func buildLoadOpts(env, root string) []gosecrets.Option {
+	opts := []gosecrets.Option{gosecrets.WithEnv(env)}
+	if root != "" {
+		opts = append(opts, gosecrets.WithRoot(root))
+	}
+
+	return opts
 }
 
-func cmdCompleteKeys(env string) error {
-	secrets, err := gosecrets.Load(buildLoadOpts(env)...)
+func cmdCompleteKeys(env, root string) error {
+	secrets, err := gosecrets.Load(buildLoadOpts(env, root)...)
 	if err != nil {
 		return nil //nolint:nilerr // silence errors during completion
 	}
@@ -239,7 +257,26 @@ func cmdCompletion(shell string) error {
 	}
 }
 
-const bashCompletionScript = `_gosecrets() {
+const bashCompletionScript = `_gosecrets_find_root() {
+    local i
+    for ((i=1; i < ${#words[@]}; i++)); do
+        if [[ "${words[i]}" == "--root" && -n "${words[i+1]}" ]]; then
+            echo "${words[i+1]}"
+            return
+        fi
+        if [[ "${words[i]}" == --root=* ]]; then
+            echo "${words[i]#--root=}"
+            return
+        fi
+    done
+    if [[ -n "${GOSECRETS_ROOT:-}" ]]; then
+        echo "$GOSECRETS_ROOT"
+        return
+    fi
+    echo "."
+}
+
+_gosecrets() {
     local cur prev words cword
     _init_completion || return
 
@@ -251,9 +288,9 @@ const bashCompletionScript = `_gosecrets() {
     local i
     for ((i=1; i < cword; i++)); do
         case "${words[i]}" in
-            --env|--env=*)
-                # skip --env and its argument
-                if [[ "${words[i]}" == "--env" ]]; then
+            --env|--env=*|--root|--root=*)
+                # skip --env/--root and their arguments
+                if [[ "${words[i]}" == "--env" || "${words[i]}" == "--root" ]]; then
                     ((i++))
                 fi
                 ;;
@@ -267,10 +304,14 @@ const bashCompletionScript = `_gosecrets() {
         esac
     done
 
+    # Resolve secrets directory from --root flag or GOSECRETS_ROOT env var
+    local secrets_dir
+    secrets_dir="$(_gosecrets_find_root)/secrets"
+
     # Complete --env value
     if [[ "$prev" == "--env" ]]; then
         local envs
-        envs=$(find secrets -name '*.enc' -maxdepth 1 2>/dev/null | sed 's|secrets/||;s|\.enc$||')
+        envs=$(find "$secrets_dir" -name '*.enc' -maxdepth 1 2>/dev/null | sed "s|$secrets_dir/||;s|\.enc$||")
         COMPREPLY=($(compgen -W "$envs" -- "$cur"))
         return
     fi
@@ -278,15 +319,27 @@ const bashCompletionScript = `_gosecrets() {
     # Complete --env= inline
     if [[ "$cur" == --env=* ]]; then
         local envs
-        envs=$(find secrets -name '*.enc' -maxdepth 1 2>/dev/null | sed 's|secrets/||;s|\.enc$||')
+        envs=$(find "$secrets_dir" -name '*.enc' -maxdepth 1 2>/dev/null | sed "s|$secrets_dir/||;s|\.enc$||")
         COMPREPLY=($(compgen -P "--env=" -W "$envs" -- "${cur#--env=}"))
+        return
+    fi
+
+    # Complete --root value with directory names
+    if [[ "$prev" == "--root" ]]; then
+        COMPREPLY=($(compgen -d -- "$cur"))
+        return
+    fi
+
+    # Complete --root= inline with directory names
+    if [[ "$cur" == --root=* ]]; then
+        COMPREPLY=($(compgen -P "--root=" -d -- "${cur#--root=}"))
         return
     fi
 
     # No subcommand yet — complete subcommands and flags
     if [[ -z "$subcmd" ]]; then
         if [[ "$cur" == -* ]]; then
-            COMPREPLY=($(compgen -W "--env --version --help" -- "$cur"))
+            COMPREPLY=($(compgen -W "--env --root --version --help" -- "$cur"))
         else
             COMPREPLY=($(compgen -W "$commands" -- "$cur"))
         fi
@@ -299,25 +352,30 @@ const bashCompletionScript = `_gosecrets() {
             # Complete keys using hidden __complete-keys command
             if [[ $cword -eq $((subcmd_idx + 1)) ]]; then
                 local env_arg=""
+                local root_arg=""
                 for ((i=1; i < ${#words[@]}; i++)); do
                     if [[ "${words[i]}" == "--env" && -n "${words[i+1]}" ]]; then
                         env_arg="--env ${words[i+1]}"
-                        break
                     fi
                     if [[ "${words[i]}" == --env=* ]]; then
                         env_arg="--env ${words[i]#--env=}"
-                        break
+                    fi
+                    if [[ "${words[i]}" == "--root" && -n "${words[i+1]}" ]]; then
+                        root_arg="--root ${words[i+1]}"
+                    fi
+                    if [[ "${words[i]}" == --root=* ]]; then
+                        root_arg="--root ${words[i]#--root=}"
                     fi
                 done
                 local keys
-                keys=$(gosecrets __complete-keys $env_arg 2>/dev/null)
+                keys=$(gosecrets __complete-keys $env_arg $root_arg 2>/dev/null)
                 COMPREPLY=($(compgen -W "$keys" -- "$cur"))
             else
-                COMPREPLY=($(compgen -W "--env" -- "$cur"))
+                COMPREPLY=($(compgen -W "--env --root" -- "$cur"))
             fi
             ;;
         init|edit|show)
-            COMPREPLY=($(compgen -W "--env" -- "$cur"))
+            COMPREPLY=($(compgen -W "--env --root" -- "$cur"))
             ;;
         completion)
             COMPREPLY=($(compgen -W "bash" -- "$cur"))
@@ -350,4 +408,62 @@ func resolveEnv(args *[]string) string {
 	}
 
 	return store.DefaultEnv
+}
+
+var (
+	errAbsoluteRoot  = errors.New("--root must be a relative path (use GOSECRETS_ROOT env var for absolute paths)")
+	errEmptyRoot     = errors.New("--root value cannot be empty")
+	errTraversalRoot = errors.New(
+		"--root must not escape the project directory" +
+			" (use GOSECRETS_ROOT env var for paths outside the project)",
+	)
+)
+
+func resolveRoot(args *[]string) (string, error) {
+	for i, arg := range *args {
+		if arg == "--root" && i+1 < len(*args) {
+			root := (*args)[i+1]
+			*args = append((*args)[:i], (*args)[i+2:]...)
+
+			if err := validateRootFlag(root); err != nil {
+				return "", err
+			}
+
+			return root, nil
+		}
+
+		if strings.HasPrefix(arg, "--root=") {
+			root := strings.TrimPrefix(arg, "--root=")
+			*args = append((*args)[:i], (*args)[i+1:]...)
+
+			if err := validateRootFlag(root); err != nil {
+				return "", err
+			}
+
+			return root, nil
+		}
+	}
+
+	if root := os.Getenv(store.EnvRoot); root != "" {
+		return root, nil
+	}
+
+	return "", nil
+}
+
+func validateRootFlag(root string) error {
+	if root == "" {
+		return errEmptyRoot
+	}
+
+	if filepath.IsAbs(root) {
+		return errAbsoluteRoot
+	}
+
+	cleaned := filepath.Clean(root)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return errTraversalRoot
+	}
+
+	return nil
 }

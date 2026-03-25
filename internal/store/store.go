@@ -15,6 +15,10 @@ const (
 	// EnvMasterKey is the environment variable name for the master key (universal override).
 	EnvMasterKey = "GOSECRETS_MASTER_KEY"
 
+	// EnvRoot is the environment variable that sets the root directory for the credential store.
+	// When set, the store directory will be <root>/secrets instead of ./secrets.
+	EnvRoot = "GOSECRETS_ROOT"
+
 	// EnvEnv is the environment variable that determines which credential files to use.
 	// When not set, defaults to DefaultEnv ("development").
 	EnvEnv = "GOSECRETS_ENV"
