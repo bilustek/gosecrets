@@ -769,11 +769,12 @@ func TestRunShowWithRootFlag(t *testing.T) {
 	dir := t.TempDir()
 	chdirTemp(t, dir)
 
-	setupStore(t, dir, store.DefaultEnv, []byte("api_key: test\n"))
+	// setup store inside relative "myroot" dir
+	myroot := filepath.Join(dir, "myroot")
+	setupStore(t, myroot, store.DefaultEnv, []byte("api_key: show-root-flag\n"))
 
-	// secrets are at absolute dir, but we use relative "." since we chdir'd there
-	if err := run([]string{"show"}); err != nil {
-		t.Fatalf("run(show) error = %v", err)
+	if err := run([]string{"show", "--root", "myroot"}); err != nil {
+		t.Fatalf("run(show --root) error = %v", err)
 	}
 }
 
@@ -785,6 +786,18 @@ func TestRunShowWithRootEnvVar(t *testing.T) {
 
 	if err := run([]string{"show"}); err != nil {
 		t.Fatalf("run(show) with GOSECRETS_ROOT error = %v", err)
+	}
+}
+
+func TestRunGetWithRootFlag(t *testing.T) {
+	dir := t.TempDir()
+	chdirTemp(t, dir)
+
+	myroot := filepath.Join(dir, "myroot")
+	setupStore(t, myroot, store.DefaultEnv, []byte("api_key: get-root-flag\n"))
+
+	if err := run([]string{"get", "api_key", "--root", "myroot"}); err != nil {
+		t.Fatalf("run(get --root) error = %v", err)
 	}
 }
 
