@@ -813,6 +813,25 @@ func TestCmdGetVerifyOutput(t *testing.T) {
 	}
 }
 
+func TestRunEditErrorOnMissingStore(t *testing.T) {
+	dir := t.TempDir()
+	chdirTemp(t, dir)
+
+	t.Setenv(store.EnvMasterKey, "")
+
+	if err := run([]string{"edit"}); err == nil {
+		t.Fatal("expected error when store is missing, got nil")
+	}
+}
+
+func TestCmdShowErrorOnNewStoreFailure(t *testing.T) {
+	t.Parallel()
+
+	if err := cmdShow("", ""); err == nil {
+		t.Fatal("expected error for empty env in cmdShow, got nil")
+	}
+}
+
 func TestCmdShowVerifyOutput(t *testing.T) {
 	dir := t.TempDir()
 	chdirTemp(t, dir)
