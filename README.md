@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-0.3.1-orange.svg)
+![Version](https://img.shields.io/badge/version-0.4.0-orange.svg)
 ![Go](https://img.shields.io/github/go-mod/go-version/bilustek/gosecrets)
 [![Documentation](https://godoc.org/github.com/bilustek/gosecrets?status.svg)](https://pkg.go.dev/github.com/bilustek/gosecrets)
 [![Go Report Card](https://goreportcard.com/badge/github.com/bilustek/gosecrets?v=2)](https://goreportcard.com/report/github.com/bilustek/gosecrets)
@@ -431,7 +431,7 @@ addr := secrets.MustTCPAddr("redis_addr")              // panics if not found or
 
 **2026-02-28**
 
-- Fix save (edit) bug `v0.3.1`
+- Fix save (edit) bug `v0.4.0`
 - Initial release `v0.1.0`
 
 ---
