@@ -387,7 +387,14 @@ func resolveEnv(args *[]string) string {
 	return store.DefaultEnv
 }
 
-var errAbsoluteRoot = errors.New("--root must be a relative path (use GOSECRETS_ROOT env var for absolute paths)")
+var (
+	errAbsoluteRoot  = errors.New("--root must be a relative path (use GOSECRETS_ROOT env var for absolute paths)")
+	errEmptyRoot     = errors.New("--root value cannot be empty")
+	errTraversalRoot = errors.New(
+		"--root must not escape the project directory" +
+			" (use GOSECRETS_ROOT env var for paths outside the project)",
+	)
+)
 
 func resolveRoot(args *[]string) (string, error) {
 	for i, arg := range *args {
@@ -395,8 +402,8 @@ func resolveRoot(args *[]string) (string, error) {
 			root := (*args)[i+1]
 			*args = append((*args)[:i], (*args)[i+2:]...)
 
-			if filepath.IsAbs(root) {
-				return "", errAbsoluteRoot
+			if err := validateRootFlag(root); err != nil {
+				return "", err
 			}
 
 			return root, nil
@@ -406,8 +413,8 @@ func resolveRoot(args *[]string) (string, error) {
 			root := strings.TrimPrefix(arg, "--root=")
 			*args = append((*args)[:i], (*args)[i+1:]...)
 
-			if filepath.IsAbs(root) {
-				return "", errAbsoluteRoot
+			if err := validateRootFlag(root); err != nil {
+				return "", err
 			}
 
 			return root, nil
@@ -419,4 +426,21 @@ func resolveRoot(args *[]string) (string, error) {
 	}
 
 	return "", nil
+}
+
+func validateRootFlag(root string) error {
+	if root == "" {
+		return errEmptyRoot
+	}
+
+	if filepath.IsAbs(root) {
+		return errAbsoluteRoot
+	}
+
+	cleaned := filepath.Clean(root)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return errTraversalRoot
+	}
+
+	return nil
 }

@@ -654,6 +654,96 @@ func TestRunRejectsAbsoluteRootFlag(t *testing.T) {
 	}
 }
 
+func TestResolveRootRejectsTraversal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		root string
+	}{
+		{"dotdot", ".."},
+		{"dotdot slash", "../outside"},
+		{"nested dotdot", "../../etc"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			args := []string{"init", "--root", tt.root}
+			_, err := resolveRoot(&args)
+
+			if !errors.Is(err, errTraversalRoot) {
+				t.Fatalf("expected errTraversalRoot for %q, got: %v", tt.root, err)
+			}
+		})
+	}
+}
+
+func TestResolveRootRejectsTraversalEquals(t *testing.T) {
+	t.Parallel()
+
+	args := []string{"init", "--root=../outside"}
+	_, err := resolveRoot(&args)
+
+	if !errors.Is(err, errTraversalRoot) {
+		t.Fatalf("expected errTraversalRoot, got: %v", err)
+	}
+}
+
+func TestResolveRootRejectsEmptyFlag(t *testing.T) {
+	t.Parallel()
+
+	args := []string{"init", "--root", ""}
+	_, err := resolveRoot(&args)
+
+	if !errors.Is(err, errEmptyRoot) {
+		t.Fatalf("expected errEmptyRoot, got: %v", err)
+	}
+}
+
+func TestResolveRootRejectsEmptyEquals(t *testing.T) {
+	t.Parallel()
+
+	args := []string{"init", "--root="}
+	_, err := resolveRoot(&args)
+
+	if !errors.Is(err, errEmptyRoot) {
+		t.Fatalf("expected errEmptyRoot, got: %v", err)
+	}
+}
+
+func TestRunRejectsTraversalRootFlag(t *testing.T) {
+	t.Parallel()
+
+	if err := run([]string{"init", "--root", "../outside"}); !errors.Is(err, errTraversalRoot) {
+		t.Fatalf("expected errTraversalRoot, got: %v", err)
+	}
+}
+
+func TestRunRejectsEmptyRootFlag(t *testing.T) {
+	t.Parallel()
+
+	if err := run([]string{"init", "--root="}); !errors.Is(err, errEmptyRoot) {
+		t.Fatalf("expected errEmptyRoot, got: %v", err)
+	}
+}
+
+func TestResolveRootAllowsSubdirWithDots(t *testing.T) {
+	t.Parallel()
+
+	args := []string{"init", "--root", "my..dir"}
+	root, err := resolveRoot(&args)
+
+	if err != nil {
+		t.Fatalf("unexpected error for dir with dots: %v", err)
+	}
+
+	if root != "my..dir" {
+		t.Fatalf("expected root %q, got %q", "my..dir", root)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // --root integration tests (NOT parallel — uses os.Chdir / t.Setenv)
 // ---------------------------------------------------------------------------

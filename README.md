@@ -108,9 +108,10 @@ By default, `gosecrets` creates and looks for the `secrets/` directory **in the
 current working directory**. If your project layout requires a different
 location, use the `--root` flag or the `GOSECRETS_ROOT` environment variable.
 
-> **Important:** The `--root` flag only accepts **relative paths** to keep
-> secrets within the project. For absolute paths (CI/CD, Docker), use the
-> `GOSECRETS_ROOT` environment variable.
+> **Important:** The `--root` flag only accepts **relative paths within the
+> project directory**. Absolute paths and `..` traversal are rejected. For
+> paths outside the project (CI/CD, Docker), use the `GOSECRETS_ROOT`
+> environment variable.
 
 ### CLI usage (relative paths only)
 
@@ -128,8 +129,10 @@ gosecrets get database.password --root ./deploy --env production
 # --root=<path> syntax also works
 gosecrets init --root=config
 
-# absolute paths are rejected by the CLI flag:
-gosecrets init --root /app   # ✘ error: use GOSECRETS_ROOT for absolute paths
+# these are rejected by the CLI:
+gosecrets init --root /app         # ✘ absolute path
+gosecrets init --root ../outside   # ✘ escapes project directory
+gosecrets init --root=             # ✘ empty value
 ```
 
 ### Environment variable (for CI/CD and Docker)
